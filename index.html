@@ -1,0 +1,2347 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3Dブース（拡張シミュレーション機能追加版）</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f0f0f0; } 
+        canvas { display: block; }
+        #instructions {
+            position: absolute; top: 15px; width: 100%; text-align: center;
+            color: #333; font-family: sans-serif; pointer-events: none; text-shadow: 1px 1px 2px white;
+        }
+        #posterControls {
+            position: absolute; bottom: 20px; left: 20px; z-index: 25;
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 15px; border-radius: 8px; font-family: sans-serif;
+            display: flex; flex-direction: column; gap: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            max-height: 85vh; overflow-y: auto;
+            width: 340px;
+        }
+        .section-title { font-weight: bold; margin: 5px 0 0 0; font-size: 14px; color: #111; border-bottom: 2px solid #555; padding-bottom: 3px; }
+        .control-group {
+            display: flex; flex-direction: column; gap: 4px;
+            border-bottom: 1px dashed #ddd; padding-bottom: 6px;
+        }
+        .control-group:last-child { border-bottom: none; padding-bottom: 0; }
+        .control-group label { font-size: 12px; font-weight: bold; color: #444; }
+        .input-row { display: flex; gap: 5px; align-items: center; }
+        input[type="file"] { font-size: 11px; flex-grow: 1; }
+        button { cursor: pointer; padding: 4px 8px; font-size: 11px; background-color: #607d8b; color: white; border: none; border-radius: 3px; transition: 0.2s; }
+        button:hover { background-color: #455a64; }
+        #toggleLight { background-color: #ff9800; font-size: 13px; font-weight: bold; width: 100%; padding: 8px; border-radius: 5px; margin-bottom: 5px; }
+        #toggleLight:hover { background-color: #e68a00; }
+    
+        #cad2dPanel{position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:20;width:560px;height:680px;min-width:420px;min-height:420px;max-width:90vw;max-height:90vh;background:rgba(255,255,255,.97);border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.28);font-family:sans-serif;display:flex;flex-direction:column;resize:both;overflow:hidden;box-sizing:border-box}#cad2dHeader{padding:10px;font-weight:bold;cursor:move;user-select:none;background:#fafafa;border-radius:8px 8px 0 0}#cad2dToolbar{padding:10px;border-bottom:1px solid #ddd;flex:none}#cad2dToolbar button{margin:2px}#cad2dViewport{flex:1;width:auto;height:auto;min-height:180px;overflow:auto;margin:10px;border:1px solid #aaa;background:#fff}#cad2dCanvas{display:block;width:800px;height:700px;background:#fff;cursor:crosshair}#cad2dInfo{padding:8px 10px;font-size:11px;color:#444;flex:none}input[type=number]{-moz-appearance:textfield}input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+</style>
+</head>
+<body>
+    <div id="cad2dPanel"><div id="cad2dHeader">2D CADレイアウトエディタ</div><div id="cad2dToolbar"><button data-cad="select">選択</button><button data-cad="wall">壁</button><button data-cad="edgewall">外壁</button><button data-cad="counter">カウンター</button><button data-cad="table">テーブル</button><button data-cad="monitor">モニター</button><button data-cad="signage">デジタルサイネージ</button><button data-cad="wallmonitor">壁面モニター</button><button data-cad="chair">パイプ椅子</button><button data-cad="catalogstand">カタログスタンド</button><button data-cad="curtain">アコーディオンカーテン</button><button data-cad="poster">ポスター</button><button data-cad="panel">展示パネル</button><button data-cad="frame">梁</button><button data-cad="sign">梁看板</button><button data-cad="displaysign">表示看板</button><button data-cad="post">柱</button><button id="cadNew" style="background:#d32f2f">新規作成</button><button id="cadDuplicate">複製</button><button id="cadRotateL">↺90°</button><button id="cadRotateR">↻90°</button><span style="font-size:11px;margin-left:4px">骨組み高さ <input id="cadFrameH" type="number" value="2.70" step="0.1" min="0.1" style="width:50px">m　梁長さ/カーテン幅 <input id="cadFrameW" type="number" value="2.00" step="0.1" min="0.1" style="width:50px">m</span><button data-cad="delete">削除</button><button id="cad3d" style="background:#2e7d32">3Dに反映</button><div style="margin-top:6px">表示倍率 <input id="cadZoom" type="range" min="50" max="180" step="10" value="100" style="width:160px"><span id="cadZoomValue">100%</span><button id="cadZoomOut">－</button><button id="cadZoomIn">＋</button><button id="cadZoomReset">リセット</button>　<label style="font-size:11px"><input id="cadShowItemNames" type="checkbox" checked>アイテム名</label> <label style="font-size:11px"><input id="cadShowItemDims" type="checkbox" checked>寸法</label></div></div><div style="padding:0 10px 5px;font-size:11px">ブース幅 <input id="cadW" type="number" value="9" step=".01" style="width:55px">m　奥行 <input id="cadD" type="number" value="3" step=".01" style="width:45px">m <button id="cadSize">適用</button>　<input id="cadSnap" type="checkbox"> 0.1mスナップ（必要なときだけ）</div><div id="cadSelectedInfo" style="padding:0 10px 5px;font-size:11px">選択：なし</div><div id="cadPositionAdjust" style="padding:0 10px 6px;font-size:11px"></div><div id="cadItemSizeAdjust" style="padding:0 10px 5px;font-size:11px"></div><div id="cadHeightAdjust" style="margin:0 10px 7px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;background:#fafafa;font-size:11px;line-height:1.8">床からの設置高さ：未選択</div><div style="padding:0 10px 5px;font-size:11px">平面図画像 <input id="cadFloorplan" type="file" accept="image/*" style="width:180px"><button id="cadFloorplanClear">画像を削除</button>　透過 <input id="cadFloorplanOpacity" type="range" min="0" max="100" value="45" style="width:90px"><span id="cadFloorplanOpacityValue">45%</span></div><div style="padding:0 10px 5px;font-size:11px">梁看板画像（推奨：1800×200px／9:1） <input id="cadSignImage" type="file" accept="image/*" style="width:180px"><button id="cadSignImageClear">選択看板の画像を削除</button></div><div style="padding:0 10px 5px;font-size:11px">表示看板画像（推奨：4724×944px／5:1） <input id="cadDisplaySignImage" type="file" accept="image/*" style="width:180px"><button id="cadDisplaySignImageClear">選択看板の画像を削除</button></div><div style="padding:0 10px 5px;font-size:11px">CADポスター画像 <input id="cadPosterImage" type="file" accept="image/*" style="width:180px"><button id="cadPosterImageClear">選択ポスターの画像を削除</button></div>
+<div style="padding:0 10px 5px;font-size:11px">CADモニター／デジタルサイネージ画像（デジタルサイネージ推奨：360×1000px／縦横比9:25、画面に合わせて自動調整） <input id="cadMonitorImage" type="file" accept="image/*" style="width:180px"><button id="cadMonitorImageClear">選択モニターの画像を削除</button></div><div id="cad2dViewport"><canvas id="cad2dCanvas" width="800" height="700"></canvas></div><div id="cad2dInfo">2Dで部材を配置してブースを設計。図面上の番号付きラベルでアイテム名を確認できます。梁・柱・壁を組み合わせ、「3Dに反映」でCADからブースを生成できます。選択モードではドラッグ移動、Deleteで削除できます。</div></div><button id="cadOpen" style="position:absolute;top:50px;right:20px;z-index:19;background:#673ab7;font-size:13px;padding:7px 10px">📐 2D CADレイアウト</button><div id="instructions">
+        <strong>【操作】</strong> 左ドラッグ：視点回転 ｜ 右ドラッグ：移動 ｜ スクロール：ズーム拡大・縮小
+    </div>
+
+    <!-- メニュー部分は変更なし -->
+    <div id="posterControls">
+        <div class="section-title">データ管理</div>
+        <div class="input-row" style="margin-bottom: 5px;">
+            <button id="saveDesignBtn" style="flex-grow: 1; background-color: #4CAF50; font-size: 13px; padding: 6px;">💾 データを書き出し</button>
+            <button id="loadDesignBtn" style="flex-grow: 1; background-color: #2196F3; font-size: 13px; padding: 6px;">📂 データを読み込み</button>
+        </div>
+        <button id="exportLayoutPdfBtn" style="width:100%;background:#8e24aa;font-size:13px;padding:8px;margin-bottom:5px;">📄 レイアウト確認シートをPDF出力</button>
+
+        <div class="section-title">環境設定</div>
+        <button id="toggleLight">💡 スポットライト ON/OFF</button>
+        <div class="control-group">
+            <div class="input-row" style="font-size:11px;">
+                光量調整: <input type="range" id="lightIntensity" min="0" max="3" step="0.1" value="1.0">
+            </div>
+        </div>
+
+        <div class="section-title">ブース詳細設定</div>
+        <div class="control-group">
+            <label>ブースタイプ</label>
+            <select id="boothType" style="font-size:12px; padding:2px;">
+                <option value="standard">標準（カウンター）</option>
+                <option value="business">商談型（テーブル・イス）</option>
+                <option value="exhibition">商品展示型（展示台）</option>
+                <option value="experience">体験型（長机・モニター）</option>
+                <option value="seminar">セミナー型（演台・イス）</option>
+                <option value="wall">壁面型（備品なし）</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>開放面設定</label>
+            <select id="openType" style="font-size:12px; padding:2px;">
+                <option value="1">1面開放（前面）</option>
+                <option value="2">2面開放（前面・右面開放）</option>
+                <option value="3">3面開放（前面・左右面開放）</option>
+                <option value="4">4面開放（全開放アイランド）</option>
+            </select>
+            <div class="input-row" style="font-size:11px; margin-top:2px;">
+                <label><input type="checkbox" id="checkLeftWall" checked>左壁</label>
+                <label><input type="checkbox" id="checkBackWall" checked>後壁</label>
+                <label><input type="checkbox" id="checkRightWall" checked>右壁</label>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>1小間の寸法と小間数</label>
+            <div class="input-row" style="font-size:11px;">
+                幅(W): <input type="number" id="unitW" value="2.97" step="0.1" style="width:40px;">m
+                奥(D): <input type="number" id="unitD" value="1.98" step="0.1" style="width:40px;">m
+            </div>
+            <div class="input-row" style="font-size:11px; margin-top:3px;">
+                横: <input type="number" id="countW" value="1" min="1" max="10" style="width:35px;">小間
+                縦: <input type="number" id="countD" value="1" min="1" max="10" style="width:35px;">小間
+                <button id="applySizeBtn">適用</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>メイン備品の表示・位置調整</label>
+            <div class="input-row" style="font-size:11px;"><label><input type="checkbox" id="checkEquip" checked> 表示する</label></div>
+            <div class="input-row" style="font-size:11px;">左右位置: <input type="range" id="posEquipX" min="-3" max="3" step="0.1" value="0"></div>
+            <div class="input-row" style="font-size:11px;">前後位置: <input type="range" id="posEquipZ" min="-3" max="3" step="0.1" value="0"></div>
+        </div>
+        <div class="control-group">
+            <label>カタログスタンドの表示・位置調整</label>
+            <div class="input-row" style="font-size:11px;"><label><input type="checkbox" id="checkStand" checked> 表示する</label></div>
+            <div class="input-row" style="font-size:11px;">左右位置: <input type="range" id="posStandX" min="-3" max="3" step="0.1" value="-1"></div>
+            <div class="input-row" style="font-size:11px;">前後位置: <input type="range" id="posStandZ" min="-3" max="3" step="0.1" value="0.5"></div>
+        </div>
+        <div class="section-title">PC機器</div>
+        <div class="control-group">
+            <label>PC画面画像（発光）</label>
+            <div class="input-row">
+                <input type="file" id="uploadPcScreen" accept="image/*"><button id="clearPcScreen">削除</button>
+            </div>
+        </div>
+
+        <div class="section-title">メインサイン</div>
+        <div class="control-group">
+            <label>上部看板（実寸 W1800×H300mm）</label>
+            <div class="input-row">
+                <input type="file" id="uploadSign" accept="image/*"><button id="clearSign">削除</button>
+            </div>
+        </div>
+
+        <div class="section-title">カタログスタンド（A4チラシ）</div>
+        <div class="control-group">
+            <label>上段チラシ</label>
+            <div class="input-row">
+                <input type="file" id="uploadFlyerTop" accept="image/*"><button id="clearFlyerTop">削除</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>中段チラシ</label>
+            <div class="input-row">
+                <input type="file" id="uploadFlyerMid" accept="image/*"><button id="clearFlyerMid">削除</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>下段チラシ</label>
+            <div class="input-row">
+                <input type="file" id="uploadFlyerBot" accept="image/*"><button id="clearFlyerBot">削除</button>
+            </div>
+        </div>
+
+        <div class="section-title">壁面ポスター（A0サイズ）</div>
+        <div class="control-group">
+            <label>① 背面（左）</label>
+            <div class="input-row">
+                <input type="file" id="uploadBackLeft" accept="image/*"><button id="clearBackLeft">削除</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>② 背面（中央）</label>
+            <div class="input-row">
+                <input type="file" id="uploadBackCenter" accept="image/*"><button id="clearBackCenter">削除</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>③ 背面（右）</label>
+            <div class="input-row">
+                <input type="file" id="uploadBackRight" accept="image/*"><button id="clearBackRight">削除</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>④ 左側面壁</label>
+            <div class="input-row">
+                <input type="file" id="uploadLeft" accept="image/*"><button id="clearLeft">削除</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>⑤ 右側面壁</label>
+            <div class="input-row">
+                <input type="file" id="uploadRight" accept="image/*"><button id="clearRight">削除</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>ポスター位置調整（3D）</label>
+            <div class="input-row" style="font-size:11px;">左右: <input type="range" id="posPosterX" min="-3" max="3" step="0.1" value="0"></div>
+            <div class="input-row" style="font-size:11px;">前後: <input type="range" id="posPosterZ" min="-3" max="3" step="0.1" value="0"></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0); 
+
+        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(4, 3.5, 5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const cadPanel=document.getElementById('cad2dPanel'), cadCanvas=document.getElementById('cad2dCanvas'), cadCtx=cadCanvas.getContext('2d');
+        const cadViewport=document.getElementById('cad2dViewport');
+        const cadHeader=document.getElementById('cad2dHeader');
+        let cadTool='select', cadObjects=[], cadSelected=-1, cadDrag=false, cadW=9, cadD=3, cadScale=70, cadZoom=1, cadOffset={x:0,z:0};
+        let cadShowItemNames=true, cadShowItemDims=true;
+        // 図面から読み取ったブース外周（m）：9000mmの正面＋4185mmの斜辺＋3000mm奥行。
+        function getCadFootprint(){return [[-cadW/2,-cadD/2],[cadW/2,-cadD/2],[cadW/2,cadD/2],[-cadW/2,cadD/2]];}
+        let cadFromScratch=false;
+        let cadFloorplanImage=null, cadFloorplanDataUrl="", cadFloorplanOpacity=0.45;
+        const cadImageCache={};
+        function getCadImage(dataUrl){
+            if(!dataUrl)return null;
+            if(cadImageCache[dataUrl])return cadImageCache[dataUrl];
+            const im=new Image();
+            im.onload=()=>drawCad();
+            im.src=dataUrl;
+            cadImageCache[dataUrl]=im;
+            return im;
+        }
+        let cadPanelDrag=false, cadPanelDragX=0, cadPanelDragY=0;
+        let originalFrameCadIds=[], originalFrameMeshes=[], originalFrameMoved=false, originalPanelCadId=-1, originalPanelMoved=false;
+
+        // CAD描画で使用するブース前面Z座標
+        const frontZ = 0; // CAD/3D共通座標系：ブース中心を原点
+        // CAD座標はブース中心を(0,0)とする。2Dと3Dで同一の座標系を使用する。
+        function cadToWorldZ(z){ return z; }
+
+        // 数値入力欄をマウスホイールで勝手に増減させない
+        document.querySelectorAll('input[type="number"]').forEach(input=>{
+            input.addEventListener('wheel',e=>e.preventDefault(),{passive:false});
+        });
+
+        // CAD画面を自由にドラッグ移動
+        cadHeader.addEventListener('mousedown',e=>{
+            cadPanelDrag=true;
+            const r=cadPanel.getBoundingClientRect();
+            cadPanel.style.transform='none';
+            cadPanelDragX=e.clientX-r.left;
+            cadPanelDragY=e.clientY-r.top;
+            cadPanel.style.left=r.left+'px';
+            cadPanel.style.top=r.top+'px';
+            e.preventDefault();
+        });
+        window.addEventListener('mousemove',e=>{
+            if(!cadPanelDrag)return;
+            const maxX=Math.max(0,window.innerWidth-cadPanel.offsetWidth);
+            const maxY=Math.max(0,window.innerHeight-cadPanel.offsetHeight);
+            cadPanel.style.left=Math.min(maxX,Math.max(0,e.clientX-cadPanelDragX))+'px';
+            cadPanel.style.top=Math.min(maxY,Math.max(0,e.clientY-cadPanelDragY))+'px';
+        });
+        window.addEventListener('mouseup',()=>cadPanelDrag=false);
+
+        // 2D CADは建築平面図と同じ向き：+X=右、+Z=手前(画面下)
+        // 3Dの+X/+Zと完全に同じ座標値を使い、平面図上では+Zを下方向に表示する。
+        function cp(x,z){return{x:cadCanvas.width/2+x*cadScale,y:cadCanvas.height/2+z*cadScale}}
+        function pc(x,y){return{x:(x-cadCanvas.width/2)/cadScale,z:(y-cadCanvas.height/2)/cadScale}}
+
+        // 高さはすべて「床面=0m」を基準とした「設置高さ」として扱う。
+        // 設置高さを変更しても、物体自身の寸法・縦横比は一切変更しない。
+        function getCadHeight(o){
+            if(!o)return 0;
+            if(o.baseY!==undefined)return o.baseY;
+            if(o.t==='frame')return Math.max(0,(o.h!==undefined?o.h:2.7)-0.025);
+            if(o.t==='sign')return o._signBaseY!==undefined?o._signBaseY:((o._frameH!==undefined?o._frameH:2.7)-(o.signH!==undefined?o.signH:.2));
+            return 0;
+        }
+        function setCadHeight(o,v){
+            if(!o)return;
+            v=Math.max(0,v);
+            o.baseY=v;
+            // 梁看板は梁との自動連動を解除し、指定した床からの設置高さを優先する。
+            if(o.t==='sign')o._signBaseY=v;
+        }
+        function getCadObjectDimensions(o){
+            if(!o)return {h:0};
+            if(o.t==='monitor'||o.t==='wallmonitor')return {h:(o.monitorHeight!==undefined?o.monitorHeight:(o.t==='wallmonitor'?0.70:0.45))};
+            if(o.t==='sign')return {h:(o.signH!==undefined?o.signH:.2)};
+            if(o.t==='displaysign')return {h:(o.signH!==undefined?o.signH:.2)};
+            if(o.t==='frame')return {h:.05};
+            if(o.t==='counter')return {h:.9};
+            if(o.t==='table')return {h:.72};
+            if(o.t==='poster')return {h:(o.posterFormat==='A1'?0.841:1.189)};
+            if(o.t==='panel')return {h:2.1};
+            if(o.t==='wall'||o.t==='post')return {h:o.h!==undefined?o.h:2.7};
+            if(o.t==='chair')return {h:.45};
+            if(o.t==='catalogstand')return {h:1.72};
+            if(o.t==='signage')return {h:1.70};
+            if(o.t==='curtain')return {h:(o.curtainHeight!==undefined?o.curtainHeight:2.0)};
+            return {h:o.h!==undefined?o.h:0};
+        }
+        function refreshCad3D(){
+            const btn=document.getElementById('cad3d');
+            if(btn)btn.click();
+        }
+
+        function drawCad(){
+            cadCtx.clearRect(0,0,cadCanvas.width,cadCanvas.height);
+            cadCtx.fillStyle='#fff';cadCtx.fillRect(0,0,cadCanvas.width,cadCanvas.height);
+
+            // アップロードした平面図を、現在のCADブース範囲に合わせて下絵として表示
+            if(cadFloorplanImage){
+                const a=cp(-cadW/2,-cadD/2), b=cp(cadW/2,cadD/2);
+                cadCtx.save();
+                cadCtx.globalAlpha=cadFloorplanOpacity;
+                cadCtx.drawImage(cadFloorplanImage,a.x,a.y,b.x-a.x,b.y-a.y);
+                cadCtx.restore();
+            }
+
+            const grid=0.5;
+            cadCtx.strokeStyle='#e6e6e6';cadCtx.lineWidth=1;
+            for(let x=-12;x<=12;x+=grid){
+                let a=cp(x,-5);cadCtx.beginPath();cadCtx.moveTo(a.x,0);cadCtx.lineTo(a.x,cadCanvas.height);cadCtx.stroke();
+            }
+            for(let z=-8;z<=8;z+=grid){
+                let a=cp(-12,z);cadCtx.beginPath();cadCtx.moveTo(0,a.y);cadCtx.lineTo(cadCanvas.width,a.y);cadCtx.stroke();
+            }
+
+            // 目盛り（0.5m刻み）
+            cadCtx.fillStyle='#555';cadCtx.font='11px sans-serif';
+            cadCtx.strokeStyle='#999';cadCtx.lineWidth=1;
+            for(let x=-10;x<=10;x+=0.5){
+                let p=cp(x,0);
+                if(p.x>=0&&p.x<=cadCanvas.width){
+                    cadCtx.beginPath();cadCtx.moveTo(p.x,cadCanvas.height/2-5);cadCtx.lineTo(p.x,cadCanvas.height/2+5);cadCtx.stroke();
+                    if(Math.abs(x-Math.round(x))<0.001) cadCtx.fillText(x.toFixed(0)+'m',p.x+2,cadCanvas.height/2-8);
+                }
+            }
+            for(let z=-7;z<=7;z+=0.5){
+                let p=cp(0,z);
+                if(p.y>=0&&p.y<=cadCanvas.height){
+                    cadCtx.beginPath();cadCtx.moveTo(cadCanvas.width/2-5,p.y);cadCtx.lineTo(cadCanvas.width/2+5,p.y);cadCtx.stroke();
+                    if(Math.abs(z-Math.round(z))<0.001) cadCtx.fillText(z.toFixed(0)+'m',cadCanvas.width/2+8,p.y-2);
+                }
+            }
+
+            // 図面形状の外周を描画（左3m・正面9m・斜辺4.185m・背面約11.959m）
+            cadCtx.strokeStyle='#222';cadCtx.lineWidth=3;
+            cadCtx.beginPath();
+            getCadFootprint().forEach((p,i)=>{const q=cp(p[0],p[1]); if(i===0)cadCtx.moveTo(q.x,q.y);else cadCtx.lineTo(q.x,q.y);});
+            cadCtx.closePath();cadCtx.stroke();
+
+            // アイテム名ラベルの配置済み領域を記録し、近接ラベルの重なりを避ける。
+            const cadLabelRects=[];
+            cadObjects.forEach((o,i)=>{
+                let q=cp(o.x,o.z);cadCtx.save();cadCtx.translate(q.x,q.y);cadCtx.rotate(o.r);
+                cadCtx.fillStyle=i===cadSelected?'#ffb74d':
+                    o.t==='wall'?'#ddd':
+                    o.t==='counter'?'#8bc34a':
+                    o.t==='table'?'#607d8b':
+                    o.t==='monitor'||o.t==='wallmonitor'?'#263238':
+                    o.t==='signage'?'#6a1b9a':
+                    o.t==='poster'?'#e91e63':
+                    o.t==='catalogstand'?'#00897b':
+                    o.t==='sign'?'#5e35b1':
+                    o.t==='panel'?'#ff9800':o.t==='post'?'#455a64':'#90a4ae';
+                if(o.t==='table'){cadCtx.beginPath();cadCtx.arc(0,0,o.w*cadScale/2,0,Math.PI*2);cadCtx.fill()}
+                else if(o.t==='curtain'){
+                    // 2D CADではカーテンを「幅×薄さ」の平面部材として描画する。
+                    // 3D用のTHREEオブジェクトはここでは生成しない。
+                    const curtainW=Math.max(.10,o.w||1.8);
+                    const curtainD=Math.max(.04,o.d||.08);
+                    cadCtx.fillStyle=i===cadSelected?'#ffb74d':'#b0bec5';
+                    cadCtx.fillRect(-curtainW*cadScale/2,-curtainD*cadScale/2,curtainW*cadScale,curtainD*cadScale);
+                    cadCtx.strokeStyle='#607d8b';
+                    cadCtx.lineWidth=1.5;
+                    cadCtx.strokeRect(-curtainW*cadScale/2,-curtainD*cadScale/2,curtainW*cadScale,curtainD*cadScale);
+                    // 折り目を幅方向に表示
+                    const folds=Math.max(4,Math.round(curtainW/0.08));
+                    for(let fi=0;fi<=folds;fi++){
+                        const fx=-curtainW*cadScale/2+fi*(curtainW*cadScale/folds);
+                        cadCtx.beginPath();
+                        cadCtx.moveTo(fx,-curtainD*cadScale/2);
+                        cadCtx.lineTo(fx,curtainD*cadScale/2);
+                        cadCtx.stroke();
+                    }
+                }
+else if(o.t==='frame'){
+                    cadCtx.strokeStyle='#546e7a';cadCtx.lineWidth=4;cadCtx.lineCap='round';
+                    cadCtx.beginPath();
+                    if(o.w>=o.d){
+                        cadCtx.moveTo(-o.w*cadScale/2,0);cadCtx.lineTo(o.w*cadScale/2,0);
+                    }else{
+                        cadCtx.moveTo(0,-o.d*cadScale/2);cadCtx.lineTo(0,o.d*cadScale/2);
+                    }
+                    cadCtx.stroke();
+                }else cadCtx.fillRect(-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                if(o.t==='poster'){
+                    if(o._posterImage){
+                        const im=getCadImage(o._posterImage);
+                        if(im&&im.complete) cadCtx.drawImage(im,-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                    }
+                    cadCtx.strokeStyle='#880e4f';cadCtx.lineWidth=2;cadCtx.strokeRect(-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                }
+                if(o.t==='sign'){
+                    if(o._signImage){
+                        const im=getCadImage(o._signImage);
+                        if(im&&im.complete) cadCtx.drawImage(im,-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                    }else{
+                        cadCtx.fillStyle='#fff';cadCtx.font='bold 10px sans-serif';cadCtx.textAlign='center';cadCtx.fillText('梁看板',0,3);
+                    }
+                    cadCtx.strokeStyle='#311b92';cadCtx.lineWidth=2;cadCtx.strokeRect(-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                }
+                cadCtx.restore();
+                // アイテム名を図面上に表示。建築平面図の注記を意識し、白地ラベルと引出線で形状を隠しにくくする。
+                // 初期状態の外周骨組みは8本の部材で構成されるため、個別ラベルを省略する。
+                if(!o.original && (cadShowItemNames || cadShowItemDims)){
+                    const itemNames={
+                        wall:'壁', edgewall:'外壁', counter:'カウンター', table:'テーブル',
+                        monitor:'モニター', signage:'デジタルサイネージ', wallmonitor:'壁面モニター', chair:'パイプ椅子',
+                        catalogstand:'カタログスタンド', curtain:'アコーディオンカーテン', poster:'ポスター', panel:'展示パネル',
+                        frame:'梁', sign:'梁看板', displaysign:'表示看板', post:'柱'
+                    };
+                    const itemName=o.name||itemNames[o.t]||'備品';
+                    const itemNo=String(cadObjects.slice(0,i+1).filter(v=>!v.original).length).padStart(2,'0');
+                    const labelText=itemNo+' '+itemName;
+                    let dimText='';
+                    if(o.t==='monitor'||o.t==='wallmonitor') dimText='50インチ画面 約1.11×0.62m';
+                    else if(o.t==='catalogstand') dimText='本体 約0.46×0.38m';
+                    else if(o.t==='poster'){const fmt=o.posterFormat==='A1'?'A1':'A0';dimText=fmt+' '+(fmt==='A1'?'0.594×0.841m':'0.841×1.189m');}
+                    else dimText='W '+(o.w||0).toFixed(2)+' × D '+(o.d||0).toFixed(2)+' m';
+                    cadCtx.save();
+                    cadCtx.textAlign='center';
+                    cadCtx.textBaseline='middle';
+                    cadCtx.font='bold 11px sans-serif';
+                    const nameW=cadShowItemNames?cadCtx.measureText(labelText).width:0;
+                    cadCtx.font='10px sans-serif';
+                    const dimW=cadShowItemDims?cadCtx.measureText(dimText).width:0;
+                    const bw=Math.max(nameW,dimW)+12,bh=(cadShowItemNames&&cadShowItemDims)?32:20;
+                    // 上下左右＋斜め方向に候補を作り、既存ラベルや他アイテムとの重なりが最小の位置を選ぶ。
+                    const directions=[[0,-1],[1,0],[0,1],[-1,0],[1,-1],[1,1],[-1,1],[-1,-1]];
+                    let best=null,bestScore=Infinity;
+                    const overlaps=(a,b,pad=4)=>a.x1<b.x2+pad&&a.x2>b.x1-pad&&a.y1<b.y2+pad&&a.y2>b.y1-pad;
+                    for(const radius of [25,39,53,67,81,95]){
+                        for(const [dx,dy] of directions){
+                            const rawX=q.x+dx*radius,rawY=q.y+dy*radius;
+                            const labelX=Math.max(bw/2+5,Math.min(cadCanvas.width-bw/2-5,rawX));
+                            const labelY=Math.max(bh/2+5,Math.min(cadCanvas.height-bh/2-5,rawY));
+                            const rect={x1:labelX-bw/2,y1:labelY-bh/2,x2:labelX+bw/2,y2:labelY+bh/2};
+                            let score=Math.hypot(labelX-q.x,labelY-q.y)*0.18;
+                            for(const r of cadLabelRects) if(overlaps(rect,r,3)) score+=10000;
+                            // 他のアイテム本体にラベルがかかる場合は大きく減点する。
+                            cadObjects.forEach((other,oi)=>{
+                                if(oi===i)return;
+                                const oq=cp(other.x,other.z);
+                                const ow=Math.max(12,Math.abs(Math.cos(other.r||0))*(other.w||0)*cadScale+Math.abs(Math.sin(other.r||0))*(other.d||0)*cadScale);
+                                const oh=Math.max(12,Math.abs(Math.sin(other.r||0))*(other.w||0)*cadScale+Math.abs(Math.cos(other.r||0))*(other.d||0)*cadScale);
+                                const itemRect={x1:oq.x-ow/2-3,y1:oq.y-oh/2-3,x2:oq.x+ow/2+3,y2:oq.y+oh/2+3};
+                                if(overlaps(rect,itemRect,2)) score+=900;
+                            });
+                            // 引出線が長すぎる候補も避ける。
+                            score+=Math.hypot(labelX-q.x,labelY-q.y)*0.025;
+                            if(score<bestScore){bestScore=score;best={x:labelX,y:labelY,rect};}
+                        }
+                        if(bestScore<100)break;
+                    }
+                    const labelX=best?best.x:q.x,labelY=best?best.y:q.y;
+                    const rect=best?best.rect:{x1:labelX-bw/2,y1:labelY-bh/2,x2:labelX+bw/2,y2:labelY+bh/2};
+                    cadLabelRects.push(rect);
+                    // 引出線はラベルの最も近い辺につなぐ。
+                    const dx=q.x-labelX,dy=q.y-labelY;
+                    let endX=labelX,endY=labelY;
+                    if(Math.abs(dx)/(bw/2)>Math.abs(dy)/(bh/2)) endX=labelX+(dx<0?-bw/2:bw/2);
+                    else endY=labelY+(dy<0?-bh/2:bh/2);
+                    cadCtx.strokeStyle='#607d8b';cadCtx.lineWidth=1;
+                    cadCtx.beginPath();cadCtx.moveTo(q.x,q.y);cadCtx.lineTo(endX,endY);cadCtx.stroke();
+                    cadCtx.fillStyle='rgba(255,255,255,0.97)';
+                    cadCtx.strokeStyle='#607d8b';cadCtx.lineWidth=1;
+                    cadCtx.beginPath();cadCtx.roundRect(labelX-bw/2,labelY-bh/2,bw,bh,3);cadCtx.fill();cadCtx.stroke();
+                    if(cadShowItemNames){cadCtx.fillStyle='#263238';cadCtx.font='bold 11px sans-serif';cadCtx.fillText(labelText,labelX,labelY-(cadShowItemDims?7:0));}
+                    if(cadShowItemDims){cadCtx.fillStyle='#1565c0';cadCtx.font='10px sans-serif';cadCtx.fillText(dimText,labelX,labelY+(cadShowItemNames?8:0));}
+                    cadCtx.restore();
+                }
+                // 選択部材の寸法・角度を表示（CAD図面らしい補助表示）
+                if(i===cadSelected){
+                    cadCtx.save();
+                    cadCtx.fillStyle='#1565c0'; cadCtx.font='bold 11px sans-serif';
+                    const label=(o.w||0).toFixed(2)+'m × '+(o.d||0).toFixed(2)+'m  '+Math.round((o.r||0)*180/Math.PI)+'°';
+                    cadCtx.fillText(label,q.x+8,q.y-8);
+                    cadCtx.restore();
+                }
+            });
+            // 初期配置の骨組み線は複数部材で構成されるため、図面の凡例で説明する。
+            if(cadObjects.some(o=>o.original)){
+                cadCtx.save();
+                cadCtx.font='bold 11px sans-serif';
+                const legend='外周線：ブース骨組み（梁・柱）';
+                const lw=cadCtx.measureText(legend).width+16;
+                cadCtx.fillStyle='rgba(255,255,255,0.96)';
+                cadCtx.strokeStyle='#607d8b';cadCtx.lineWidth=1;
+                cadCtx.fillRect(10,10,lw,24);cadCtx.strokeRect(10,10,lw,24);
+                cadCtx.fillStyle='#263238';cadCtx.textBaseline='middle';cadCtx.fillText(legend,18,22);
+                cadCtx.restore();
+            }
+            // ブース外形寸法
+            cadCtx.save(); cadCtx.fillStyle='#1565c0'; cadCtx.font='bold 12px sans-serif';
+            cadCtx.fillText(cadW.toFixed(2)+' m',cadCanvas.width/2-25,cadCanvas.height/2+cadD*cadScale/2+22);
+            cadCtx.save(); cadCtx.translate(cadCanvas.width/2+cadW*cadScale/2+24,cadCanvas.height/2); cadCtx.rotate(-Math.PI/2); cadCtx.fillText(cadD.toFixed(2)+' m',0,0); cadCtx.restore();
+            cadCtx.restore();
+            const si=document.getElementById('cadSelectedInfo');
+            const ha=document.getElementById('cadHeightAdjust');
+            if(si){ const o=cadObjects[cadSelected]; si.textContent=o ? '選択：'+(o.name||({monitor:'モニター',wallmonitor:'壁面モニター',poster:'ポスター',table:'テーブル',counter:'カウンター',chair:'パイプ椅子',catalogstand:'カタログスタンド',panel:'展示パネル',wall:'壁',curtain:'アコーディオンカーテン',frame:'梁',sign:'梁看板',post:'柱'}[o.t]||o.t))+'　位置('+o.x.toFixed(2)+', '+o.z.toFixed(2)+')m　寸法 '+o.w.toFixed(2)+'×'+o.d.toFixed(2)+'m　回転 '+Math.round(o.r*180/Math.PI)+'°' : '選択：なし'; }
+            const posPanel=document.getElementById('cadPositionAdjust');
+            if(posPanel){const o=cadObjects[cadSelected]; if(o){posPanel.innerHTML='位置をミリ単位で指定：X <input id="cadPosX" type="number" step="0.001" value="'+o.x.toFixed(3)+'" style="width:82px"> m　Z <input id="cadPosZ" type="number" step="0.001" value="'+o.z.toFixed(3)+'" style="width:82px"> m <button id="cadPosApply">位置を適用</button><div style="margin-top:3px;color:#555">数値は0.001m（1mm）単位。矢印ボタンで1mmずつ移動できます。</div><button id="cadXMinus">X −1mm</button> <button id="cadXPlus">X ＋1mm</button> <button id="cadZMinus">Z −1mm</button> <button id="cadZPlus">Z ＋1mm</button>';posPanel.style.display='block';const applyPos=()=>{const x=parseFloat(document.getElementById('cadPosX').value),z=parseFloat(document.getElementById('cadPosZ').value);if(!Number.isFinite(x)||!Number.isFinite(z))return;o.x=Math.round(x*1000)/1000;o.z=Math.round(z*1000)/1000;if(o.original){if(cadSelected===originalPanelCadId)originalPanelMoved=true;else originalFrameMoved=true;}drawCad();refreshCad3D();};document.getElementById('cadPosApply').onclick=applyPos;[['cadXMinus','x',-.001],['cadXPlus','x',.001],['cadZMinus','z',-.001],['cadZPlus','z',.001]].forEach(([id,axis,delta])=>{document.getElementById(id).onclick=()=>{o[axis]=Math.round((o[axis]+delta)*1000)/1000;if(o.original){if(cadSelected===originalPanelCadId)originalPanelMoved=true;else originalFrameMoved=true;}drawCad();refreshCad3D();};});}else{posPanel.innerHTML='';posPanel.style.display='none';}}
+            const sizePanel=document.getElementById('cadItemSizeAdjust');
+            if(sizePanel){const o=cadObjects[cadSelected]; if(o&&o.t==='poster'){const fmt=o.posterFormat==='A1'?'A1':'A0';sizePanel.innerHTML='ポスター規格： <select id="cadPosterFormat"><option value="A0" '+(fmt==='A0'?'selected':'')+'>A0（841×1189mm）</option><option value="A1" '+(fmt==='A1'?'selected':'')+'>A1（594×841mm）</option></select>';sizePanel.style.display='block';const sel=document.getElementById('cadPosterFormat');sel.onchange=()=>{o.posterFormat=sel.value;o.w=sel.value==='A1'?.594:.841;o.d=.04;drawCad();refreshCad3D();};}else if(o&&(o.t==='monitor'||o.t==='wallmonitor')){sizePanel.innerHTML='モニター規格：50インチ（画面 約1107×623mm）';sizePanel.style.display='block';}else if(o&&o.t==='displaysign'){sizePanel.innerHTML='表示看板サイズ：幅 <input id="cadDisplaySignW" type="number" min="0.1" step="0.01" value="'+(o.w||1.8).toFixed(2)+'" style="width:65px"> m　高さ <input id="cadDisplaySignH" type="number" min="0.05" step="0.01" value="'+(o.signH||.2).toFixed(2)+'" style="width:65px"> m <button id="cadDisplaySignSizeApply" style="background:#2e7d32">サイズ適用</button><div style="font-size:10px;color:#555">初期サイズ：梁看板と同じ W1.80 × H0.20m</div>';sizePanel.style.display='block';document.getElementById('cadDisplaySignSizeApply').onclick=()=>{const w=parseFloat(document.getElementById('cadDisplaySignW').value),h=parseFloat(document.getElementById('cadDisplaySignH').value);if(!Number.isFinite(w)||!Number.isFinite(h)||w<=0||h<=0){alert('幅と高さは0より大きい数値を入力してください。');return;}o.w=w;o.signH=h;if(o._abovePoster){const p=cadObjects.filter(v=>v.t==='poster').sort((a,b)=>Math.hypot(a.x-o.x,a.z-o.z)-Math.hypot(b.x-o.x,b.z-o.z))[0];if(p){o.x=p.x;o.z=p.z;o.r=p.r||0;o.baseY=(p.baseY!==undefined?p.baseY:0)+getCadObjectDimensions(p).h+0.02;}}drawCad();refreshCad3D();};}else{sizePanel.innerHTML='';sizePanel.style.display='none';}}
+            if(ha){
+                const o=cadObjects[cadSelected];
+                if(!o){
+                    ha.innerHTML='床からの設置高さ：未選択';
+                    ha.style.color='#444'; ha.style.borderColor='#ccc'; ha.style.background='#fafafa';
+                }else{
+                    const hv=getCadHeight(o);
+                    ha.innerHTML='床からの設置高さ：<input id="cadObjectHeight" type="number" min="0" step="0.01" value="'+hv.toFixed(2)+'" style="width:65px;margin-left:4px"> m <button id="cadObjectHeightDown" style="margin-left:4px">−</button><button id="cadObjectHeightUp">＋</button><button id="cadObjectHeightApply" style="margin-left:4px;background:#2e7d32">適用</button>';
+                    ha.style.color='#444'; ha.style.borderColor='#ccc'; ha.style.background='#fafafa';
+                    const hi=document.getElementById('cadObjectHeight');
+                    const hb=document.getElementById('cadObjectHeightApply');
+                    const hd=document.getElementById('cadObjectHeightDown');
+                    const hu=document.getElementById('cadObjectHeightUp');
+                    const applyHeight=()=>{
+                        const v=parseFloat(hi.value);
+                        if(!isFinite(v)||v<0)return;
+                        setCadHeight(o,v);
+                        drawCad();
+                        refreshCad3D();
+                        cadPanel.style.display='flex';
+                    };
+                    hb.onclick=applyHeight;
+                    hd.onclick=()=>{hi.value=Math.max(0,parseFloat(hi.value||hv)-0.01).toFixed(2);applyHeight();};
+                    hu.onclick=()=>{hi.value=(parseFloat(hi.value||hv)+0.01).toFixed(2);applyHeight();};
+                    hi.addEventListener('change',applyHeight);
+                    hi.addEventListener('keydown',e=>{if(e.key==='Enter')applyHeight();});
+                }
+            }
+        }
+
+        function hit(x,z){
+            for(let i=cadObjects.length-1;i>=0;i--){
+                let o=cadObjects[i];
+                const dx=x-o.x,dz=z-o.z;
+                const c=Math.cos(o.r),sn=Math.sin(o.r);
+                const lx=dx*c+dz*sn, lz=-dx*sn+dz*c;
+                if(o.t==='frame'){
+                    const len=Math.max(o.w,o.d);
+                    const half=len/2+.20;
+                    const across=Math.max(.12,Math.min(o.w,o.d)/2+.20);
+                    if(Math.abs(lx)<half&&Math.abs(lz)<across)return i;
+                }else if(Math.abs(lx)<o.w/2+.15&&Math.abs(lz)<o.d/2+.15)return i;
+            }
+            return -1;
+        }
+
+        document.querySelectorAll('[data-cad]').forEach(b=>b.onclick=()=>cadTool=b.dataset.cad);
+        document.getElementById('cadShowItemNames').addEventListener('change',e=>{cadShowItemNames=e.target.checked;drawCad();});
+        document.getElementById('cadShowItemDims').addEventListener('change',e=>{cadShowItemDims=e.target.checked;drawCad();});
+        document.getElementById('cadOpen').onclick=()=>{
+            const opening=cadPanel.style.display==='none';
+            cadPanel.style.display=opening?'flex':'none';
+            if(opening) drawCad();
+        };
+        document.getElementById('cadNew').onclick=()=>{
+            if(!confirm('2D CADを空にして、ここから新しくブースを作成しますか？'))return;
+            cadObjects=[];
+            cadSelected=-1;
+            originalFrameCadIds=[];
+            originalFrameMeshes=[];
+            originalFrameMoved=false;
+            originalPanelCadId=-1;
+            originalPanelMoved=false;
+            cadFromScratch=true;
+            // 新規作成では、既存のデフォルト物品配置をすべて非表示
+            if(typeof equipmentsGroup!=='undefined') equipmentsGroup.visible=false;
+            if(typeof standGroup!=='undefined') standGroup.visible=false;
+            if(typeof posters!=='undefined') Object.values(posters).forEach(p=>p.mesh.visible=false);
+            if(typeof exhibitionPanelGroup!=='undefined') exhibitionPanelGroup.visible=false;
+            drawCad();
+        };
+        document.getElementById('cadDuplicate').onclick=()=>{
+            if(cadSelected<0)return;
+            const o=cadObjects[cadSelected]; const n=JSON.parse(JSON.stringify(o)); n.original=false; n.x+=0.2; n.z+=0.2; snapObject(n); cadObjects.push(n); cadSelected=cadObjects.length-1; drawCad();
+        };
+        document.getElementById('cadRotateL').onclick=()=>{if(cadSelected>=0){cadObjects[cadSelected].r-=Math.PI/2;drawCad();}};
+        document.getElementById('cadRotateR').onclick=()=>{if(cadSelected>=0){cadObjects[cadSelected].r+=Math.PI/2;drawCad();}};
+
+        document.getElementById('cadSize').onclick=()=>{
+            cadW=parseFloat(document.getElementById('cadW').value)||6;
+            cadD=parseFloat(document.getElementById('cadD').value)||3;
+            drawCad();
+        };
+
+        function setCadZoom(v){
+            cadZoom=Math.max(.5,Math.min(1.8,v));
+            cadScale=70*cadZoom;
+            const pct=Math.round(cadZoom*100);
+            document.getElementById('cadZoom').value=pct;
+            document.getElementById('cadZoomValue').textContent=pct+'%';
+            drawCad();
+        }
+        document.getElementById('cadZoom').oninput=e=>setCadZoom(parseInt(e.target.value)/100);
+        document.getElementById('cadZoomIn').onclick=()=>setCadZoom(cadZoom+.1);
+        document.getElementById('cadZoomOut').onclick=()=>setCadZoom(cadZoom-.1);
+        document.getElementById('cadZoomReset').onclick=()=>setCadZoom(1);
+
+        function snapCad(v){ return document.getElementById('cadSnap')?.checked ? Math.round(v*10)/10 : v; }
+        function snapObject(o){ o.x=snapCad(o.x); o.z=snapCad(o.z); }
+
+        // 外壁の自動吸着処理（自由配置を優先するため通常の配置・ドラッグでは呼び出さない）。
+        function snapEdgeWall(o){
+            const hw=cadW/2, hd=cadD/2;
+            const dTop=Math.abs(o.z + hd), dBottom=Math.abs(o.z - hd), dLeft=Math.abs(o.x + hw), dRight=Math.abs(o.x - hw);
+            const m=Math.min(dTop,dBottom,dLeft,dRight);
+            if(m===dTop || m===dBottom){
+                o.z=(m===dTop ? -hd : hd); o.r=0;
+                o.x=Math.max(-hw+o.w/2,Math.min(hw-o.w/2,o.x));
+            }else{
+                o.x=(m===dLeft ? -hw : hw); o.r=Math.PI/2;
+                o.z=Math.max(-hd+o.w/2,Math.min(hd-o.w/2,o.z));
+            }
+        }
+
+        // ポスターの壁面吸着処理（自由配置を優先するため通常の配置・ドラッグでは呼び出さない）。
+        function snapPosterToWall(o){
+            if(!o || o.t!=='poster') return;
+            const hw=cadW/2, hd=cadD/2;
+            const distances=[
+                {side:'back',d:Math.abs(o.z+hd)},
+                {side:'front',d:Math.abs(o.z-hd)},
+                {side:'left',d:Math.abs(o.x+hw)},
+                {side:'right',d:Math.abs(o.x-hw)}
+            ].sort((a,b)=>a.d-b.d);
+            const side=distances[0].side;
+            const halfW=Math.max(.01,o.w||.841)/2;
+            if(side==='back' || side==='front'){
+                o.z=side==='back' ? -hd+.012 : hd-.012;
+                o.x=Math.max(-hw+halfW,Math.min(hw-halfW,o.x));
+                o.r=0;
+            }else{
+                o.x=side==='left' ? -hw+.012 : hw-.012;
+                o.z=Math.max(-hd+halfW,Math.min(hd-halfW,o.z));
+                o.r=Math.PI/2;
+            }
+            o._wallMounted=true;
+        }
+
+        // 梁看板の梁への吸着処理（自由配置を優先するため通常の配置・ドラッグでは呼び出さない）。
+        function snapSignToFrame(o){
+            let best=null,bestDist=Infinity;
+            cadObjects.forEach(f=>{
+                if(f.t!=='frame')return;
+                const c=Math.cos(f.r),sn=Math.sin(f.r);
+                const dx=o.x-f.x,dz=o.z-f.z;
+                const along=dx*c+dz*sn;
+                const len=Math.max(f.w,f.d);
+                const clamped=Math.max(-len/2,Math.min(len/2,along));
+                const px=f.x+clamped*c,pz=f.z+clamped*sn;
+                const dist=Math.hypot(o.x-px,o.z-pz);
+                if(dist<bestDist){bestDist=dist;best={f,px,pz,clamped};}
+            });
+            if(best){
+                const f=best.f;
+                o.x=best.px;o.z=best.pz;o.r=f.r;
+                const len=Math.max(f.w,f.d);
+                o.w=Math.min(o.w,len);
+                o._frameH=f.h!==undefined?f.h:2.7;
+            }
+        }
+
+        cadCanvas.onmousedown=e=>{
+            let r=cadCanvas.getBoundingClientRect(),q=pc((e.clientX-r.left)*cadCanvas.width/r.width,(e.clientY-r.top)*cadCanvas.height/r.height);
+            if(cadTool==='select'){
+                cadSelected=hit(q.x,q.z);
+                if(cadSelected>=0){
+                    const o=cadObjects[cadSelected];
+                    if(o.original){
+                        if(cadSelected===originalPanelCadId)originalPanelMoved=true;else originalFrameMoved=true;
+                    }
+                    // 骨組みも通常のドラッグで自由に移動
+                    cadDrag=true;
+                    cadOffset={x:q.x-o.x,z:q.z-o.z};
+                }
+            }else if(cadTool==='delete'){
+                let i=hit(q.x,q.z);if(i>=0)cadObjects.splice(i,1);cadSelected=-1;
+            }else{
+                let d={wall:[2,.08],edgewall:[2,.08],counter:[1,.55],table:[.8,.8],monitor:[1.107,.15],signage:[.46,.38],poster:[.841,.04],panel:[1.0,.08],frame:[2.0,.05],sign:[1.8,.04],displaysign:[1.8,.05],post:[.10,.10],wallmonitor:[.90,.08],chair:[.45,.45],curtain:[1.80,.08],catalogstand:[.46,.38]}[cadTool];
+                if(d){
+                    let obj={t:(cadTool==='edgewall'?'wall':cadTool),x:snapCad(q.x),z:snapCad(q.z),w:d[0],d:d[1],r:0};
+                    // 配置位置はカーソルを優先。壁・梁への自動吸着は行わず、自由配置を可能にする。
+                    if(cadTool==='edgewall'){ obj._edgeWall=true; }
+                    if(cadTool==='displaysign'){
+                        obj.name='表示看板';obj.w=1.8;obj.d=.05;obj.signH=.2;
+                        // 近くの壁面ポスターの真上に取り付ける。ポスターと位置・向きをそろえる。
+                        const wallPoster=cadObjects.filter(v=>v.t==='poster').sort((a,b)=>Math.hypot(a.x-obj.x,a.z-obj.z)-Math.hypot(b.x-obj.x,b.z-obj.z))[0];
+                        if(wallPoster){
+                            obj.x=wallPoster.x;obj.z=wallPoster.z;obj.r=wallPoster.r||0;
+                            const posterH=getCadObjectDimensions(wallPoster).h;
+                            obj.baseY=(wallPoster.baseY!==undefined?wallPoster.baseY:0)+posterH+0.02;
+                            obj._abovePoster=true;
+                        }else{
+                            obj.baseY=2.5;
+                        }
+                    }
+                    if(cadTool==='poster'){obj.posterFormat='A0';obj.w=.841;obj.d=.012;}
+                    if(cadTool==='frame'){
+                        const fh=parseFloat(document.getElementById('cadFrameH').value);
+                        const fw=parseFloat(document.getElementById('cadFrameW').value);
+                        obj.h=isFinite(fh)&&fh>0?fh:2.7;
+                        obj.w=isFinite(fw)&&fw>0?fw:2.0;
+                    }
+                    if(cadTool==='monitor'){obj.monitorInches=50;obj.screenW=1.107;obj.screenH=.623;obj.monitorHeight=1.48;}
+                    if(cadTool==='signage'){obj.name='デジタルサイネージ';obj.baseY=0;obj.screenW=.36;obj.screenH=1.0;}
+                    if(cadTool==='wallmonitor'){ obj.monitorInches=50;obj.screenW=1.107;obj.screenH=.623;obj.w=1.107;obj.monitorHeight=.70; obj.baseY=1.35; }
+                    if(cadTool==='chair'){ obj.baseY=0; }
+                    if(cadTool==='catalogstand'){ obj.baseY=0; obj.name='カタログスタンド'; }
+                    if(cadTool==='curtain'){ obj.curtainHeight=2.7; obj.baseY=0; }
+                    cadObjects.push(obj);cadSelected=cadObjects.length-1;
+                }
+            }
+            drawCad();
+        };
+
+        window.onmousemove=e=>{
+            if(!cadDrag||cadSelected<0)return;
+            let r=cadCanvas.getBoundingClientRect();
+            let q=pc((e.clientX-r.left)*cadCanvas.width/r.width,(e.clientY-r.top)*cadCanvas.height/r.height),o=cadObjects[cadSelected];
+            // 骨組みを含め、ドラッグ中は選択した位置関係を保ったまま自由移動
+            o.x=snapCad(q.x-cadOffset.x);
+            o.z=snapCad(q.z-cadOffset.z);
+            // ドラッグ中も自動吸着・位置補正を行わず、カーソル位置に追従させる。
+            drawCad();
+        };
+        window.onmouseup=()=>cadDrag=false;
+
+        // CADで追加した全アイテムを360度回転
+        cadCanvas.addEventListener('wheel',e=>{
+            if(cadSelected<0)return;
+            e.preventDefault();
+            cadObjects[cadSelected].r += (e.deltaY>0 ? Math.PI/36 : -Math.PI/36);if(cadObjects[cadSelected].original){if(cadSelected===originalPanelCadId)originalPanelMoved=true;else originalFrameMoved=true;}
+            drawCad();
+        },{passive:false});
+
+        document.getElementById('cadFrameH').addEventListener('change',e=>{
+            if(cadSelected>=0&&cadObjects[cadSelected].t==='frame'){
+                const v=parseFloat(e.target.value);
+                if(isFinite(v)&&v>0){cadObjects[cadSelected].h=v;drawCad();}
+            }
+        });
+
+        // 選択した梁の長さを自由に変更
+        document.getElementById('cadFrameW').addEventListener('change',e=>{
+            if(cadSelected>=0&&cadObjects[cadSelected].t==='frame'){
+                const v=parseFloat(e.target.value);
+                if(isFinite(v)&&v>0){cadObjects[cadSelected].w=v;drawCad();}
+            }
+        });
+
+        // 選択したアコーディオンカーテンの幅を自由に変更
+        document.getElementById('cadFrameW').addEventListener('change',e=>{
+            if(cadSelected>=0&&cadObjects[cadSelected].t==='curtain'){
+                const v=parseFloat(e.target.value);
+                if(isFinite(v)&&v>0){
+                    cadObjects[cadSelected].w=v;
+                    drawCad();
+                    refreshCad3D();
+                    cadPanel.style.display='flex';
+                }
+            }
+        });
+
+        document.getElementById('cad3d').onclick=()=>{
+            let old=scene.getObjectByName('__CAD__');if(old)scene.remove(old);
+            let g=new THREE.Group();g.name='__CAD__';scene.add(g);
+
+            // 「新規作成」したCADでは、既存の固定ブースを使わずCADだけで構築
+            if(cadFromScratch){
+                [backWall,leftWall,rightWall,topFrameFront,topFrameCenter,frontLeftFrame,frontRightFrame,backLeftFrame,backRightFrame,topFrameBack,topFrameLeft,topFrameRight,signBase,signBottomFrame,signLeftFrame,signRightFrame].forEach(x=>{if(x)x.visible=false});
+                // 既存のデフォルト物品は配置せず、CADで作成した部材だけを表示
+                equipmentsGroup.visible=false;
+                standGroup.visible=false;
+                Object.values(posters).forEach(p=>p.mesh.visible=false);
+                exhibitionPanelGroup.visible=false;
+                const floorMatCad=new THREE.MeshStandardMaterial({color:0x999999,roughness:1.0,side:THREE.DoubleSide});
+                const floorShape=new THREE.Shape();
+                getCadFootprint().forEach((p,i)=>{ if(i===0) floorShape.moveTo(p[0],p[1]); else floorShape.lineTo(p[0],p[1]); });
+                floorShape.closePath();
+                const floorCad=new THREE.Mesh(new THREE.ShapeGeometry(floorShape),floorMatCad);
+                floorCad.rotation.x=-Math.PI/2;
+                floorCad.position.set(0,0,0);
+                floorCad.receiveShadow=true;
+                g.add(floorCad);
+            }else{
+                [backWall,leftWall,rightWall,topFrameFront,topFrameCenter,frontLeftFrame,frontRightFrame,backLeftFrame,backRightFrame,topFrameBack,topFrameLeft,topFrameRight,signBase,signBottomFrame,signLeftFrame,signRightFrame].forEach(x=>{if(x)x.visible=true});
+                equipmentsGroup.visible=document.getElementById('checkEquip').checked;
+                standGroup.visible=document.getElementById('checkStand').checked;
+                applyWallVisibility();
+            }
+
+            let mats={
+                wall:new THREE.MeshStandardMaterial({color:0xf5f5f5}),
+                counter:new THREE.MeshStandardMaterial({color:0x8bc34a}),
+                table:new THREE.MeshStandardMaterial({color:0x607d8b}),
+                monitor:new THREE.MeshStandardMaterial({color:0x151515}),
+                poster:new THREE.MeshStandardMaterial({color:0xffffff,side:THREE.DoubleSide}),
+                panel:new THREE.MeshStandardMaterial({color:0xf5f5f5}),
+                frame:new THREE.MeshStandardMaterial({color:0xcccccc,metalness:0.6,roughness:0.4}),
+                sign:new THREE.MeshStandardMaterial({color:0xffffff,side:THREE.DoubleSide})
+            };
+            cadObjects.forEach((o,oi)=>{
+                if(o.original)return;
+                let m,y=0,h=0;
+                if(o.t==='table'){h=getCadObjectDimensions(o).h;m=new THREE.Mesh(new THREE.CylinderGeometry(o.w/2,o.w/2,h,32),mats.table);y=(o.baseY!==undefined?o.baseY:0)+h/2}
+                else if(o.t==='wall'){h=getCadObjectDimensions(o).h;y=(o.baseY!==undefined?o.baseY:0)+h/2;m=new THREE.Mesh(new THREE.BoxGeometry(o.w,h,o.d),mats.wall)}
+                else if(o.t==='counter'){
+                    h=getCadHeight(o);y=0;
+                    const cg=new THREE.Group();
+                    const bodyMat=new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:.72,metalness:.05});
+                    const topMatCad=new THREE.MeshStandardMaterial({color:0x4b4038,roughness:.45,metalness:.05});
+                    const trimMat=new THREE.MeshStandardMaterial({color:0x9e9e9e,roughness:.5,metalness:.25});
+                    const body=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.1,o.w-.04),.82,Math.max(.1,o.d-.04)),bodyMat); body.position.y=.41; body.castShadow=true; body.receiveShadow=true; cg.add(body);
+                    const top=new THREE.Mesh(new THREE.BoxGeometry(o.w+.04,.06,o.d+.04),topMatCad); top.position.y=.87; top.castShadow=true; top.receiveShadow=true; cg.add(top);
+                    const fascia=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.1,o.w-.14),.34,.025),trimMat); fascia.position.set(0,.56,-o.d/2-.002); fascia.castShadow=true; cg.add(fascia);
+                    const kick=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.1,o.w-.12),.06,.035),new THREE.MeshStandardMaterial({color:0x555555,roughness:.65,metalness:.2})); kick.position.set(0,.055,-o.d/2-.006); kick.castShadow=true; cg.add(kick);
+                    const sideL=new THREE.Mesh(new THREE.BoxGeometry(.025,.82,Math.max(.05,o.d-.08)),trimMat); sideL.position.set(-o.w/2+.025,.41,0); cg.add(sideL);
+                    const sideR=sideL.clone(); sideR.position.x=o.w/2-.025; cg.add(sideR);
+                    m=cg;
+                    // 寸法は固定。床からの設置高さだけを変更する。
+                    y=(o.baseY!==undefined?o.baseY:0);
+                }
+                else if(o.t==='monitor'||o.t==='signage'){
+                    // 移動式大型ディスプレイスタンド／縦型デジタルサイネージ
+                    // 参考画像に合わせ、画面・左右2本の支柱・伸縮部・棚・下部横バー・
+                    // 左右の脚・前後4輪のキャスターを独立した部品として造形する。
+                    // baseY は「このモデルの最下点（キャスター底面）」から床までの設置高さ。
+                    // baseYを変更してもモデルの寸法・縦横比は一切変更しない。
+                    const mg=new THREE.Group();
+
+                    const housingMat=new THREE.MeshStandardMaterial({color:0x17191b,roughness:.30,metalness:.22});
+                    const bezelMat=new THREE.MeshStandardMaterial({color:0x070809,roughness:.22,metalness:.30});
+                    const poleMat=new THREE.MeshStandardMaterial({color:0x202326,roughness:.24,metalness:.68});
+                    const poleHiMat=new THREE.MeshStandardMaterial({color:0x44484b,roughness:.18,metalness:.82});
+                    const shelfMat=new THREE.MeshStandardMaterial({color:0x292c2f,roughness:.30,metalness:.50});
+                    const rubberMat=new THREE.MeshStandardMaterial({color:0x090a0b,roughness:.72,metalness:.05});
+                    const glassMat=new THREE.MeshPhysicalMaterial({color:0x18232b,roughness:.045,metalness:.08,clearcoat:.90,clearcoatRoughness:.045});
+
+                    // 業務用ディスプレイ風の表示面。CADで画像を設定した場合は静止画をそのまま投影する。
+                    const screenTexture=(()=>{
+                        if(o._monitorImage){
+                            const tx=new THREE.TextureLoader().load(o._monitorImage);
+                            tx.encoding=THREE.sRGBEncoding; tx.anisotropy=4;
+                            return tx;
+                        }
+                        const c=document.createElement('canvas'); c.width=1200; c.height=675;
+                        const g=c.getContext('2d');
+                        g.fillStyle='#101820'; g.fillRect(0,0,c.width,c.height);
+                        const grd=g.createLinearGradient(0,0,1200,675);
+                        grd.addColorStop(0,'#19384d'); grd.addColorStop(.5,'#101b28'); grd.addColorStop(1,'#183039');
+                        g.fillStyle=grd; g.fillRect(0,0,1200,675);
+                        g.fillStyle='rgba(255,255,255,.92)'; g.font='bold 42px Arial';
+                        g.fillText('BUSINESS DISPLAY',48,64);
+                        g.fillStyle='rgba(255,255,255,.55)'; g.font='22px Arial';
+                        g.fillText('2026  PERFORMANCE OVERVIEW',50,98);
+                        [[50,132,'SALES','128.4'],[335,132,'USERS','8,240'],[620,132,'GROWTH','+18.6%'],[905,132,'TARGET','94%']].forEach(a=>{
+                            g.fillStyle='rgba(255,255,255,.08)'; g.fillRect(a[0],a[1],240,100);
+                            g.fillStyle='rgba(255,255,255,.55)'; g.font='18px Arial'; g.fillText(a[2],a[0]+16,a[1]+28);
+                            g.fillStyle='white'; g.font='bold 30px Arial'; g.fillText(a[3],a[0]+16,a[1]+70);
+                        });
+                        g.strokeStyle='rgba(120,210,255,.95)'; g.lineWidth=5; g.beginPath();
+                        const pts=[[65,535],[170,475],[270,500],[370,405],[470,430],[570,330],[670,370],[770,285],[870,310],[970,215],[1080,240]];
+                        pts.forEach((pt,i)=>i?g.lineTo(pt[0],pt[1]):g.moveTo(pt[0],pt[1])); g.stroke();
+                        g.strokeStyle='rgba(255,255,255,.12)'; g.lineWidth=2;
+                        for(let yy=190;yy<=540;yy+=70){g.beginPath();g.moveTo(50,yy);g.lineTo(1150,yy);g.stroke();}
+                        const tx=new THREE.CanvasTexture(c);
+                        tx.encoding=THREE.sRGBEncoding; tx.anisotropy=4;
+                        return tx;
+                    })();
+                    const screenMat=new THREE.MeshBasicMaterial({map:screenTexture, side:THREE.FrontSide});
+
+                    // モデル全体の実寸。最下点は casterBottom で 0.00m にする。
+                    const isSignage=o.t==='signage';
+                    const W=isSignage?.36:1.107, H=isSignage?1.00:.623, D=.050;
+                    const screenBottom=isSignage?.62:1.48;
+                    const screenCenter=screenBottom+H/2;
+
+                    function roundedRectShape(w,h,r){
+                        const sh=new THREE.Shape(), x=-w/2, y=-h/2;
+                        sh.moveTo(x+r,y); sh.lineTo(x+w-r,y);
+                        sh.quadraticCurveTo(x+w,y,x+w,y+r);
+                        sh.lineTo(x+w,y+h-r); sh.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+                        sh.lineTo(x+r,y+h); sh.quadraticCurveTo(x,y+h,x,y+h-r);
+                        sh.lineTo(x,y+r); sh.quadraticCurveTo(x,y,x+r,y);
+                        return sh;
+                    }
+                    function roundedBox(w,h,d,r,mat){
+                        const geo=new THREE.ExtrudeGeometry(
+                            roundedRectShape(w,h,r),
+                            {depth:d,bevelEnabled:true,bevelSegments:3,bevelSize:.004,bevelThickness:.004,curveSegments:6}
+                        );
+                        geo.center();
+                        const q=new THREE.Mesh(geo,mat);
+                        q.castShadow=true; q.receiveShadow=true;
+                        return q;
+                    }
+                    function box(w,h,d,x,y,z,mat){
+                        const q=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+                        q.position.set(x,y,z); q.castShadow=true; q.receiveShadow=true;
+                        mg.add(q); return q;
+                    }
+
+                    // 画面本体
+                    const body=roundedBox(W,H,D,.018,housingMat);
+                    body.position.set(0,screenCenter,0); mg.add(body);
+
+                    // 前面ガラス・液晶表示
+                    const glass=new THREE.Mesh(new THREE.PlaneGeometry(W-.034,H-.034),glassMat);
+                    glass.position.set(0,screenCenter,D/2+.005); mg.add(glass);
+                    const display=new THREE.Mesh(new THREE.PlaneGeometry(W-.050,H-.050),screenMat);
+                    display.position.set(0,screenCenter,D/2+.008); mg.add(display);
+                    // 裏面には画像を複製しない。背面は本体筐体のみとし、画像の裏写りを防ぐ。
+
+                    // サイネージは「縦長ディスプレイ＋左右2本の支柱＋キャスター付きの足」だけにする。
+                    // モニター側の棚・背面ハウジング・横バー等はサイネージには追加しない。
+                    if(isSignage){
+                        const legMat=new THREE.MeshStandardMaterial({color:0x24272a,roughness:.28,metalness:.65});
+                        const wheelMat=new THREE.MeshStandardMaterial({color:0x090a0b,roughness:.7,metalness:.05});
+                        [-.13,.13].forEach(x=>{
+                            const leg=new THREE.Mesh(new THREE.BoxGeometry(.035,screenBottom-.10,.035),legMat);
+                            leg.position.set(x,(screenBottom+.10)/2,0); leg.castShadow=true; leg.receiveShadow=true; mg.add(leg);
+                            // 左右それぞれ1本の足とキャスター
+                            const foot=new THREE.Mesh(new THREE.BoxGeometry(.075,.045,.42),legMat);
+                            foot.position.set(x,.075,0); foot.castShadow=true; foot.receiveShadow=true; mg.add(foot);
+                            [-.17,.17].forEach(z=>{
+                                const mount=new THREE.Mesh(new THREE.BoxGeometry(.035,.055,.035),legMat);
+                                mount.position.set(x,.035,z); mount.castShadow=true; mg.add(mount);
+                                const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.022,18),wheelMat);
+                                wheel.rotation.z=Math.PI/2; wheel.position.set(x,.035,z); wheel.castShadow=true; mg.add(wheel);
+                            });
+                        });
+                    }
+                    if(!isSignage){
+                    // 極細ベゼル
+                    box(W-.020,.012,.012,0,screenBottom+H-.012,-D/2-.010,bezelMat);
+                    box(W-.020,.012,.012,0,screenBottom+.012,-D/2-.010,bezelMat);
+                    box(.012,H-.030,.012,-W/2+.010,screenCenter,-D/2-.010,bezelMat);
+                    box(.012,H-.030,.012,W/2-.010,screenCenter,-D/2-.010,bezelMat);
+                    // 下部中央ロゴ
+                    box(.075,.009,.010,0,screenBottom+.024,-D/2-.016,poleHiMat);
+
+                    // 背面VESAハウジング
+                    const rear=roundedBox(.42,.26,.060,.025,housingMat);
+                    rear.position.set(0,screenCenter,-.052); mg.add(rear);
+                    box(.22,.13,.018,0,screenCenter,-.088,bezelMat);
+                    for(let i=0;i<12;i++) box(.018,.004,.010,-.12+i*.022,screenCenter+.078,-.098,rubberMat);
+
+                    // 左右2本の縦支柱：画面下端から棚まで
+                    const poleX=isSignage?.13:.22, shelfTop=isSignage?.48:.82, lowerTop=isSignage?.32:.54;
+                    [-poleX,poleX].forEach(x=>{
+                        box(.058,screenBottom-shelfTop,.058,x,shelfTop+(screenBottom-shelfTop)/2,.0,poleMat);
+                        // 伸縮ジョイント
+                        const joint=new THREE.Mesh(new THREE.CylinderGeometry(.034,.034,.040,20),poleHiMat);
+                        joint.rotation.z=Math.PI/2;
+                        joint.position.set(x,shelfTop+.12,.0);
+                        joint.castShadow=true; mg.add(joint);
+                        box(.058,shelfTop-lowerTop,.058,x,lowerTop+(shelfTop-lowerTop)/2,.0,poleMat);
+                    });
+
+                    // 中央の機器棚
+                    const shelf=roundedBox(isSignage?.40:.76,.038,isSignage?.25:.31,.012,shelfMat);
+                    shelf.position.set(0,.805,.0); mg.add(shelf);
+                    box(isSignage?.32:.57,.012,isSignage?.19:.235,0,.830,.0,poleHiMat);
+
+                    // 下部の左右支柱と横連結バー
+                    [-poleX,poleX].forEach(x=>{
+                        box(.058,lowerTop-.18,.058,x,.18+(lowerTop-.18)/2,.0,poleMat);
+                    });
+                    box(.50,.055,.065,0,.18,.0,poleMat);
+
+                    // 左右の長いアウトリガー脚。
+                    // 前後方向に十分な長さを持たせ、脚が途中で途切れないようにする。
+                    const footY=.105;
+                    [-1,1].forEach(side=>{
+                        const legW=isSignage?.24:.62;
+                        const mainLeg=new THREE.Mesh(new THREE.BoxGeometry(legW,.075,.085),poleMat);
+                        mainLeg.position.set(side*(isSignage?.12:.31),footY,0);
+                        mainLeg.rotation.z=side*.035;
+                        mainLeg.castShadow=true; mainLeg.receiveShadow=true; mg.add(mainLeg);
+
+                        // 前後へ伸びるキャスターアーム
+                        [-1,1].forEach(front=>{
+                            const arm=new THREE.Mesh(new THREE.BoxGeometry(isSignage?.065:.105,.060,isSignage?.30:.42),poleMat);
+                            arm.position.set(side*(isSignage?.205:.56),footY,front*(isSignage?.14:.20));
+                            arm.rotation.y=side*front*.10;
+                            arm.castShadow=true; arm.receiveShadow=true; mg.add(arm);
+
+                            // キャスターフォーク
+                            const fork=new THREE.Mesh(new THREE.BoxGeometry(.050,.125,.050),poleMat);
+                            fork.position.set(side*(isSignage?.22:.57),.070,front*(isSignage?.27:.39));
+                            fork.castShadow=true; mg.add(fork);
+
+                            // キャスター本体＋車輪
+                            const casterBody=new THREE.Mesh(new THREE.BoxGeometry(.070,.045,.065),rubberMat);
+                            casterBody.position.set(side*(isSignage?.22:.57),.050,front*(isSignage?.27:.39));
+                            casterBody.castShadow=true; mg.add(casterBody);
+
+                            const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.026,20),rubberMat);
+                            wheel.rotation.z=Math.PI/2;
+                            wheel.position.set(side*(isSignage?.22:.57),.045,front*(isSignage?.27:.39));
+                            wheel.castShadow=true; wheel.receiveShadow=true; mg.add(wheel);
+
+                            const hub=new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,.030,16),poleHiMat);
+                            hub.rotation.z=Math.PI/2;
+                            hub.position.set(side*(isSignage?.22:.57),.045,front*(isSignage?.27:.39));
+                            hub.castShadow=true; mg.add(hub);
+                        });
+                    });
+
+                    // 接地補助脚：最下点を床から約0.008mにして、床とのめり込みを防止
+                    (isSignage?[-.18,.18]:[-.48,.48]).forEach(x=>(isSignage?[-.20,.20]:[-.25,.25]).forEach(z=>{
+                        const foot=new THREE.Mesh(new THREE.CylinderGeometry(.024,.024,.045,16),rubberMat);
+                        foot.position.set(x,.023,z); foot.castShadow=true; mg.add(foot);
+                    }));
+
+                    // 背面側に不要な反射用の四角い面を追加しない。
+                    // 初期グラフ画面（display）はそのまま維持する。
+                    } // if(!isSignage)
+
+                    // CAD上の幅だけX方向に合わせる。Y/Zは固定。
+                    // 「床からの高さ(baseY)」では絶対にscaleしない。
+                    const width=Math.max(.2,o.w||(isSignage?.46:1.3));
+                    // サイネージはカタログスタンド相当の約0.46m幅に収め、画面は縦長のまま維持する。
+                    mg.scale.x=isSignage ? 1 : width/W;
+                    mg.scale.y=1;
+                    mg.scale.z=1;
+                    m=mg;
+
+                    // グループの最下点を floor=0 として扱う。
+                    y=(o.baseY!==undefined?o.baseY:0);
+                }
+                else if(o.t==='wallmonitor'){
+                    const mg=new THREE.Group();
+                    const housingMat=new THREE.MeshStandardMaterial({color:0x17191b,roughness:.28,metalness:.30});
+                    const bezelMat=new THREE.MeshStandardMaterial({color:0x050607,roughness:.20,metalness:.35});
+                    const screenTexture=(()=>{
+                        if(!o._monitorImage)return null;
+                        const cached=cadMonitorImageCache[o._monitorImage];
+                        if(cached&&cached.complete&&cached.naturalWidth>0){const tx=new THREE.CanvasTexture(cached);tx.encoding=THREE.sRGBEncoding;tx.needsUpdate=true;return tx;}
+                        const tx=new THREE.TextureLoader().load(o._monitorImage);tx.encoding=THREE.sRGBEncoding;return tx;
+                    })();
+                    const screenMat=new THREE.MeshBasicMaterial({map:screenTexture,color:0xffffff,side:THREE.FrontSide});
+                    const bracketMat=new THREE.MeshStandardMaterial({color:0x4b4f52,roughness:.30,metalness:.75});
+                    const W=Math.max(.25,o.w||.90), H=getCadObjectDimensions(o).h, D=Math.max(.035,o.d||.08);
+                    const body=new THREE.Mesh(new THREE.BoxGeometry(W,H,D),housingMat); body.castShadow=true; body.receiveShadow=true; mg.add(body);
+                    const screen=new THREE.Mesh(new THREE.PlaneGeometry(W-.06,H-.06),screenMat); screen.position.set(0,0,D/2+.006); mg.add(screen);
+                    // 背面には画像面を複製しない。画像の裏写りを防ぎ、筐体背面を見せる。
+                    const top=new THREE.Mesh(new THREE.BoxGeometry(W-.02,.012,.012),bezelMat); top.position.set(0,H/2-.012,-D/2-.012); mg.add(top);
+                    const bottom=top.clone(); bottom.position.y=-H/2+.012; mg.add(bottom);
+                    const left=new THREE.Mesh(new THREE.BoxGeometry(.012,H-.03,.012),bezelMat); left.position.set(-W/2+.01,0,-D/2-.012); mg.add(left);
+                    const right=left.clone(); right.position.x=W/2-.01; mg.add(right);
+                    // 壁面固定用ブラケット
+                    const bracket1=new THREE.Mesh(new THREE.BoxGeometry(.10,.28,.16),bracketMat); bracket1.position.set(-W*.25,0,D/2+.08); mg.add(bracket1);
+                    const bracket2=bracket1.clone(); bracket2.position.x=W*.25; mg.add(bracket2);
+                    const rail=new THREE.Mesh(new THREE.BoxGeometry(W*.62,.055,.055),bracketMat); rail.position.set(0,0,D/2+.17); mg.add(rail);
+                    m=mg;
+                    y=(o.baseY!==undefined?o.baseY:1.35)+H/2;
+                }
+                else if(o.t==='chair'){
+                    // 実物のパイプ椅子に近い構造：座面・背板・丸パイプ脚・クロス補強・ヒンジ・脚先キャップ
+                    const cg=new THREE.Group();
+                    const tube=new THREE.MeshStandardMaterial({color:0x4e5255,roughness:.22,metalness:.82});
+                    const tubeHi=new THREE.MeshStandardMaterial({color:0x777c80,roughness:.18,metalness:.88});
+                    const seatMat=new THREE.MeshStandardMaterial({color:0x202326,roughness:.48,metalness:.12});
+                    const backMat=new THREE.MeshStandardMaterial({color:0x25282a,roughness:.42,metalness:.15});
+                    const rubber=new THREE.MeshStandardMaterial({color:0x101112,roughness:.78,metalness:.02});
+                    const sw=Math.max(.34,o.w||.45), sd=Math.max(.34,o.d||.45);
+                    const seatY=.46, seatT=.045, tubeR=.011;
+                    const makeTube=(a,b,mat=tube,r=tubeR)=>{
+                        const v=new THREE.Vector3().subVectors(b,a),len=v.length();
+                        const q=new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,12),mat);
+                        q.position.copy(a).add(b).multiplyScalar(.5);
+                        q.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());
+                        q.castShadow=true;q.receiveShadow=true;cg.add(q);return q;
+                    };
+                    const makeBox=(w,h,d,x,y,z,mat)=>{const q=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);q.position.set(x,y,z);q.castShadow=true;q.receiveShadow=true;cg.add(q);return q;};
+                    // 座面（薄いクッション＋裏側フレーム）
+                    makeBox(sw-.035,seatT,sd-.035,0,seatY,0,seatMat);
+                    makeBox(sw-.10,.025,sd-.10,0,seatY-.040,0,tubeHi);
+                    // 座面下の左右フレーム
+                    [-1,1].forEach(side=>makeTube(new THREE.Vector3(side*sw*.36,.415,-sd*.34),new THREE.Vector3(side*sw*.36,.415,sd*.34),tubeHi,.010));
+                    // 折りたたみ式の前後脚＋後脚をわずかに外へ開く
+                    const legPts=[[-sw*.36,-sd*.34],[sw*.36,-sd*.34],[-sw*.36,sd*.34],[sw*.36,sd*.34]];
+                    legPts.forEach(p=>{
+                        const footX=p[0]*1.08, footZ=p[1]*1.08;
+                        makeTube(new THREE.Vector3(p[0],.045,p[1]),new THREE.Vector3(footX,seatY-.03,footZ),tube);
+                        const cap=new THREE.Mesh(new THREE.CylinderGeometry(.018,.020,.022,12),rubber);
+                        cap.position.set(footX,.034,footZ);cap.castShadow=true;cg.add(cap);
+                    });
+                    // 交差する折りたたみ補強
+                    makeTube(new THREE.Vector3(-sw*.34,.12,-sd*.30),new THREE.Vector3(sw*.34,.39,sd*.30),tubeHi,.009);
+                    makeTube(new THREE.Vector3(sw*.34,.12,-sd*.30),new THREE.Vector3(-sw*.34,.39,sd*.30),tubeHi,.009);
+                    // 座面下の横桟
+                    makeTube(new THREE.Vector3(-sw*.34,.18,0),new THREE.Vector3(sw*.34,.18,0),tubeHi,.009);
+                    // 背もたれ支柱（丸パイプ）
+                    const backZ=sd*.36;
+                    makeTube(new THREE.Vector3(-sw*.36,.43,backZ),new THREE.Vector3(-sw*.36,.82,backZ),tube);
+                    makeTube(new THREE.Vector3(sw*.36,.43,backZ),new THREE.Vector3(sw*.36,.82,backZ),tube);
+                    // 背板＋上下の背面パイプ
+                    makeBox(sw-.065,.055,.035,0,.72,backZ+.005,backMat);
+                    makeBox(sw-.075,.040,.035,0,.825,backZ,tubeHi);
+                    makeBox(sw-.075,.035,.035,0,.625,backZ,tube);
+                    // ヒンジ金具
+                    [-sw*.36,sw*.36].forEach(x=>{const hng=new THREE.Mesh(new THREE.CylinderGeometry(.020,.020,.055,16),tubeHi);hng.rotation.z=Math.PI/2;hng.position.set(x,.455,0);hng.castShadow=true;cg.add(hng);});
+                    m=cg; y=(o.baseY!==undefined?o.baseY:0);
+                }
+                else if(o.t==='catalogstand'){
+                    // 既存のA4チラシ3段カタログスタンドをテンプレートとして複製。
+                    // テンプレートは初期状態で非表示のため、複製側は明示的に表示する。
+                    // 初期配置・回転をリセットし、CADで指定した位置・回転だけを反映する。
+                    m=standGroup.clone(true);
+                    m.visible=true;
+                    m.traverse(child=>{ if(child.isObject3D) child.visible=true; });
+                    m.position.set(0,0,0);
+                    m.rotation.set(0,0,0);
+                    m.scale.set(1,1,1);
+                    y=(o.baseY!==undefined?o.baseY:0);
+                }
+                else if(o.t==='curtain'){
+                    // アコーディオン式カーテン：連続した蛇腹面を実際に凹凸形状として生成
+                    const cg=new THREE.Group();
+                    const fabric=new THREE.MeshStandardMaterial({color:0xa4a7aa,roughness:.88,metalness:.01,side:THREE.DoubleSide});
+                    const fabricSide=new THREE.MeshStandardMaterial({color:0x8f9396,roughness:.92,metalness:.01,side:THREE.DoubleSide});
+                    const railMat=new THREE.MeshStandardMaterial({color:0x666a6d,roughness:.25,metalness:.82});
+                    const runnerMat=new THREE.MeshStandardMaterial({color:0xb7bbbe,roughness:.20,metalness:.78});
+                    const H=getCadObjectDimensions(o).h, W=Math.max(.4,o.w||1.8), D=Math.max(.04,o.d||.08);
+                    const folds=Math.max(10,Math.round(W/.10));
+                    const amp=Math.min(.055,D*.48);
+                    const seg=folds*2;
+                    const pos=[];
+                    const idx=[];
+                    for(let i=0;i<=seg;i++){
+                        const x=-W/2+W*i/seg;
+                        const z=amp*(i%2===0?1:-1);
+                        pos.push(x,0,z,x,H,z);
+                    }
+                    for(let i=0;i<seg;i++){const a=i*2,b=(i+1)*2;idx.push(a,b,b+1,a,a+1,b+1);}
+                    const geo=new THREE.BufferGeometry();
+                    geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+                    geo.setIndex(idx);geo.computeVertexNormals();
+                    const panel=new THREE.Mesh(geo,fabric);panel.castShadow=true;panel.receiveShadow=true;cg.add(panel);
+                    // 折り目の陰影を強調する細い縦ライン
+                    for(let i=1;i<seg;i+=2){
+                        const x=-W/2+W*i/seg,z=amp*(i%2===0?1:-1);
+                        const fold=new THREE.Mesh(new THREE.CylinderGeometry(.006,.006,H,8),fabricSide);
+                        fold.position.set(x,H/2,z);fold.castShadow=true;cg.add(fold);
+                    }
+                    // 上部レール＋ランナーを追加
+                    const topRail=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,W,20),railMat);
+                    topRail.rotation.z=Math.PI/2;topRail.position.set(0,H+.025,0);topRail.castShadow=true;cg.add(topRail);
+                    for(let i=0;i<=folds;i++){
+                        const x=-W/2+W*i/folds;
+                        const runner=new THREE.Mesh(new THREE.SphereGeometry(.018,10,8),runnerMat);runner.position.set(x,H+.005,0);runner.castShadow=true;cg.add(runner);
+                    }
+                    // 下端の重り／ガイド
+                    const bottomRail=new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,W,16),railMat);
+                    bottomRail.rotation.z=Math.PI/2;bottomRail.position.set(0,.025,0);bottomRail.castShadow=true;cg.add(bottomRail);
+                    m=cg;y=(o.baseY!==undefined?o.baseY:0);
+                }
+                else if(o.t==='poster'){h=getCadObjectDimensions(o).h;y=(o.baseY!==undefined?o.baseY:0)+h/2;const posterSide=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.82});let posterFront=posterSide,posterBack=posterSide;if(o._posterImage){const tex=new THREE.TextureLoader().load(o._posterImage);tex.colorSpace=THREE.SRGBColorSpace;posterFront=new THREE.MeshStandardMaterial({map:tex,side:THREE.FrontSide,roughness:.75});posterBack=new THREE.MeshStandardMaterial({color:0xffffff,side:THREE.FrontSide,roughness:.82});}m=new THREE.Mesh(new THREE.BoxGeometry(o.w,h,Math.max(.012,o.d)),[posterSide,posterSide,posterSide,posterSide,posterFront,posterBack])}
+                else if(o.t==='panel'){h=getCadObjectDimensions(o).h;y=(o.baseY!==undefined?o.baseY:0)+h/2;m=new THREE.Mesh(new THREE.BoxGeometry(o.w, h, o.d),mats.panel);m.rotation.y=o.r}
+                else if(o.t==='curtain'){
+                    cadCtx.fillStyle='#b0bec5';cadCtx.fillRect(-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                    cadCtx.strokeStyle='#607d8b';cadCtx.lineWidth=1.5;
+                    const folds=Math.max(4,Math.round(o.w/0.08));
+                    for(let fi=0;fi<=folds;fi++){const fx=-o.w*cadScale/2+fi*(o.w*cadScale/folds);cadCtx.beginPath();cadCtx.moveTo(fx,-o.d*cadScale/2);cadCtx.lineTo(fx,o.d*cadScale/2);cadCtx.stroke();}
+                }else if(o.t==='chair'){
+                    cadCtx.strokeStyle='#455a64';cadCtx.lineWidth=2;cadCtx.strokeRect(-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                    cadCtx.beginPath();cadCtx.moveTo(-o.w*cadScale*.35,-o.d*cadScale*.35);cadCtx.lineTo(o.w*cadScale*.35,o.d*cadScale*.35);cadCtx.moveTo(o.w*cadScale*.35,-o.d*cadScale*.35);cadCtx.lineTo(-o.w*cadScale*.35,o.d*cadScale*.35);cadCtx.stroke();
+                }else if(o.t==='catalogstand'){
+                    cadCtx.fillStyle=i===cadSelected?'#ffb74d':'#b2dfdb';
+                    cadCtx.fillRect(-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                    cadCtx.strokeStyle='#00695c';cadCtx.lineWidth=1.5;
+                    cadCtx.strokeRect(-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                    // 平面図でカタログポケット3段を簡易表示
+                    for(let si=1;si<=3;si++){
+                        const sy=-o.d*cadScale/2+(o.d*cadScale*si/4);
+                        cadCtx.beginPath();cadCtx.moveTo(-o.w*cadScale*.36,sy);cadCtx.lineTo(o.w*cadScale*.36,sy);cadCtx.stroke();
+                    }
+                }else if(o.t==='wallmonitor'){
+                    cadCtx.fillStyle='#263238';cadCtx.fillRect(-o.w*cadScale/2,-o.d*cadScale/2,o.w*cadScale,o.d*cadScale);
+                    cadCtx.strokeStyle='#90caf9';cadCtx.lineWidth=2;cadCtx.strokeRect(-o.w*cadScale*.42,-o.d*cadScale*.2,o.w*cadScale*.84,o.d*cadScale*.4);
+                }else if(o.t==='frame'){h=.05;y=(o.baseY!==undefined?o.baseY:Math.max(0,(o.h!==undefined?o.h:2.7)-.025))+.025;m=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.05,o.w),.05,Math.max(.05,o.d)),mats.frame);m.rotation.y=o.r}
+                else if(o.t==='sign'){
+                    const sh=o.signH!==undefined?o.signH:0.2;
+                    // 看板のサイズは固定し、床から看板下端までの高さだけを変更する。
+                    const sy=(o._signBaseY!==undefined?o._signBaseY:((o._frameH!==undefined?o._frameH:2.7)-sh))+sh/2;
+                    let front=mats.sign,back=mats.sign,side=new THREE.MeshStandardMaterial({color:0xeeeeee});
+                    if(o._signImage){
+                        const tex=new THREE.TextureLoader().load(o._signImage);
+                        tex.colorSpace=THREE.SRGBColorSpace;
+                        front=new THREE.MeshStandardMaterial({map:tex,side:THREE.FrontSide});
+                        back=new THREE.MeshStandardMaterial({color:0xffffff});
+                    }
+                    m=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.05,o.w),sh,Math.max(.03,o.d)),[side,side,side,side,front,back]);
+                    y=sy;h=sh;m.rotation.y=o.r;
+                }
+                 else if(o.t==='displaysign'){
+                    const sh=o.signH!==undefined?o.signH:.944;
+                    const sy=(o.baseY!==undefined?o.baseY:1.5)+sh/2;
+                    const sideMat=new THREE.MeshStandardMaterial({color:0xeeeeee,roughness:.75});
+                    let frontMat=new THREE.MeshStandardMaterial({color:0xffffff,side:THREE.FrontSide});
+                    if(o._displaySignImage){const tex=new THREE.TextureLoader().load(o._displaySignImage);tex.colorSpace=THREE.SRGBColorSpace;frontMat=new THREE.MeshStandardMaterial({map:tex,side:THREE.FrontSide,roughness:.8});}
+                    m=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.1,o.w||4.724),sh,Math.max(.03,o.d||.05)),[sideMat,sideMat,sideMat,sideMat,frontMat,new THREE.MeshStandardMaterial({color:0xffffff})]);
+                    y=sy;h=sh;m.rotation.y=o.r;
+                }
+                 else if(o.t==='post'){h=getCadObjectDimensions(o).h;y=(o.baseY!==undefined?o.baseY:0)+h/2;m=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.05,o.w),h,Math.max(.05,o.d)),mats.frame);m.rotation.y=o.r}
+                else if(o.t==='chair'){h=getCadObjectDimensions(o).h;y=(o.baseY!==undefined?o.baseY:0)+h/2;m=new THREE.Mesh(new THREE.BoxGeometry(o.w,h,o.d),mats.table)}
+                if(m){m.position.set(o.x,y,o.z);m.rotation.y=-o.r;m.castShadow=true;m.receiveShadow=true;g.add(m)}
+            });
+            originalFrameCadIds.forEach((id,i)=>{
+                const o=cadObjects[id],m=originalFrameMeshes[i];
+                if(!o||!m)return;
+                const fh=o.h!==undefined?o.h:h;
+                const fy=(o.baseY!==undefined?o.baseY:Math.max(0,fh-.025));
+                m.position.set(o.x,i<4?fy+.025:fh/2,o.z);
+                m.rotation.y=-o.r;
+            });
+
+            // もともとの展示パネルをCADの位置・回転に同期
+            if(originalPanelCadId>=0){
+                const po=cadObjects[originalPanelCadId];
+                if(po){
+                    exhibitionPanel.position.set(po.x,1.05,po.z);
+                    exhibitionPanel.rotation.y=-po.r;
+                }
+            }
+            // 3D表示は従来の斜め上からの視点に戻し、ブース中央を注視する。
+            camera.position.set(9,6.5,11);
+            camera.up.set(0,1,0);
+            controls.target.set(0,1.0,0);
+            controls.update();
+            cadPanel.style.display='none';
+        };
+        // 平面図画像のアップロード／削除／透過率
+        document.getElementById('cadFloorplan').addEventListener('change',e=>{
+            const file=e.target.files[0];
+            if(!file)return;
+            const reader=new FileReader();
+            reader.onload=ev=>{
+                const img=new Image();
+                img.onload=()=>{cadFloorplanImage=img;cadFloorplanDataUrl=ev.target.result;drawCad();};
+                img.src=ev.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        document.getElementById('cadFloorplanClear').addEventListener('click',()=>{
+            document.getElementById('cadFloorplan').value='';
+            cadFloorplanImage=null;
+            cadFloorplanDataUrl='';
+            drawCad();
+        });
+        document.getElementById('cadFloorplanOpacity').addEventListener('input',e=>{
+            cadFloorplanOpacity=parseInt(e.target.value)/100;
+            document.getElementById('cadFloorplanOpacityValue').textContent=e.target.value+'%';
+            drawCad();
+        });
+        // 梁看板画像のアップロード／削除（選択中の梁看板に適用）
+        document.getElementById('cadSignImage').addEventListener('change',e=>{
+            const file=e.target.files[0];
+            if(!file || cadSelected<0 || cadObjects[cadSelected].t!=='sign')return;
+            const reader=new FileReader();
+            reader.onload=ev=>{cadObjects[cadSelected]._signImage=ev.target.result;drawCad();document.getElementById('cadSignImage').value='';};
+            reader.readAsDataURL(file);
+        });
+        document.getElementById('cadSignImageClear').addEventListener('click',()=>{
+            if(cadSelected>=0 && cadObjects[cadSelected].t==='sign'){
+                delete cadObjects[cadSelected]._signImage;
+                drawCad();
+            }
+            document.getElementById('cadSignImage').value='';
+        });
+
+        // 表示看板画像のアップロード／削除（選択中の表示看板に適用）
+        document.getElementById('cadDisplaySignImage').addEventListener('change',e=>{
+            const file=e.target.files[0];
+            if(!file)return;
+            if(cadSelected<0 || cadObjects[cadSelected].t!=='displaysign'){
+                alert('先に2D CAD上で「表示看板」を選択してください。'); e.target.value=''; return;
+            }
+            const reader=new FileReader();
+            reader.onload=ev=>{cadObjects[cadSelected]._displaySignImage=ev.target.result;drawCad();refreshCad3D();cadPanel.style.display='flex';e.target.value='';};
+            reader.readAsDataURL(file);
+        });
+        document.getElementById('cadDisplaySignImageClear').addEventListener('click',()=>{
+            if(cadSelected>=0 && cadObjects[cadSelected].t==='displaysign'){
+                delete cadObjects[cadSelected]._displaySignImage;drawCad();refreshCad3D();cadPanel.style.display='flex';
+            }
+            document.getElementById('cadDisplaySignImage').value='';
+        });
+
+        // CADポスター画像のアップロード／削除（選択中のポスターに個別適用）
+        document.getElementById('cadPosterImage').addEventListener('change',e=>{
+            const file=e.target.files[0];
+            if(!file || cadSelected<0 || cadObjects[cadSelected].t!=='poster')return;
+            const reader=new FileReader();
+            reader.onload=ev=>{cadObjects[cadSelected]._posterImage=ev.target.result;drawCad();document.getElementById('cadPosterImage').value='';};
+            reader.readAsDataURL(file);
+        });
+        document.getElementById('cadPosterImageClear').addEventListener('click',()=>{
+            if(cadSelected>=0 && cadObjects[cadSelected].t==='poster'){
+                delete cadObjects[cadSelected]._posterImage;
+                drawCad();
+            }
+            document.getElementById('cadPosterImage').value='';
+        });
+
+        drawCad();
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 1.2, 0); 
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0xbbbbbb, 0.8);
+        hemiLight.position.set(0, 10, 0);
+        scene.add(hemiLight);
+
+        const bigSightOverheadLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        bigSightOverheadLight.position.set(0, 10, 0); 
+        bigSightOverheadLight.castShadow = true;
+        bigSightOverheadLight.shadow.mapSize.width = 2048;
+        bigSightOverheadLight.shadow.mapSize.height = 2048;
+        bigSightOverheadLight.shadow.camera.near = 0.1;
+        bigSightOverheadLight.shadow.camera.far = 20;
+        bigSightOverheadLight.shadow.camera.left = -3;
+        bigSightOverheadLight.shadow.camera.right = 3;
+        bigSightOverheadLight.shadow.camera.top = 3;
+        bigSightOverheadLight.shadow.camera.bottom = -3;
+        scene.add(bigSightOverheadLight);
+
+        // 3. ブースのサイズとマテリアル
+        let w = 2.97, d = 1.98, h = 2.70, wallThickness = 0.05;
+        // ★修正箇所: 前面（看板側）のZ座標は上で定義済み
+        // CADはブース中央を原点として表示する
+        cadW = w; cadD = d;
+        document.getElementById('cadW').value = w.toFixed(2);
+        document.getElementById('cadD').value = d.toFixed(2);
+
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xfcfcfc, roughness: 0.8 });
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.6, roughness: 0.4 });
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 1.0 });
+
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), floorMat);
+        floor.rotation.x = -Math.PI / 2; 
+        floor.position.z = frontZ - d/2; // ★修正
+        floor.receiveShadow = true; scene.add(floor);
+
+        const backWall = new THREE.Mesh(new THREE.BoxGeometry(w + wallThickness*2, h, wallThickness), wallMat);
+        backWall.position.set(0, h/2, frontZ - d - wallThickness/2); // ★修正
+        backWall.castShadow = true; backWall.receiveShadow = true; scene.add(backWall);
+
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(wallThickness, h, d), wallMat);
+        leftWall.position.set(-w/2 - wallThickness/2, h/2, frontZ - d/2); // ★修正
+        leftWall.castShadow = true; leftWall.receiveShadow = true; scene.add(leftWall);
+
+        const rightWall = new THREE.Mesh(new THREE.BoxGeometry(wallThickness, h, d), wallMat);
+        rightWall.position.set(w/2 + wallThickness/2, h/2, frontZ - d/2); // ★修正
+        rightWall.castShadow = true; rightWall.receiveShadow = true; scene.add(rightWall);
+
+        const topFrameFront = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, 0.05), frameMat);
+        topFrameFront.position.set(0, h, frontZ); // ★修正
+        scene.add(topFrameFront);
+        
+        const topFrameCenter = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, d), frameMat);
+        topFrameCenter.position.set(0, h, frontZ - d/2); // ★修正
+        scene.add(topFrameCenter);
+
+        const frontLeftFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, h, 0.05), frameMat);
+        frontLeftFrame.position.set(-w/2, h/2, frontZ); // ★修正
+        scene.add(frontLeftFrame);
+        const frontRightFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, h, 0.05), frameMat);
+        frontRightFrame.position.set(w/2, h/2, frontZ); // ★修正
+        scene.add(frontRightFrame);
+
+        const backLeftFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, h, 0.05), frameMat);
+        backLeftFrame.position.set(-w/2, h/2, frontZ - d); // ★修正
+        scene.add(backLeftFrame);
+        const backRightFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, h, 0.05), frameMat);
+        backRightFrame.position.set(w/2, h/2, frontZ - d); // ★修正
+        scene.add(backRightFrame);
+
+        const topFrameBack = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, 0.05), frameMat);
+        topFrameBack.position.set(0, h, frontZ - d); // ★修正
+        scene.add(topFrameBack);
+        const topFrameLeft = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, d), frameMat);
+        topFrameLeft.position.set(-w/2, h, frontZ - d/2); // ★修正
+        scene.add(topFrameLeft);
+        const topFrameRight = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, d), frameMat);
+        topFrameRight.position.set(w/2, h, frontZ - d/2); // ★修正
+        scene.add(topFrameRight);
+
+        // もともとの骨組みもCAD上で個別に移動・回転できるように登録
+        originalFrameCadIds=[];
+        [
+            {x:0,z:frontZ,w:w,d:.05,h:h},
+            {x:0,z:frontZ-d,w:w,d:.05,h:h},
+            {x:-w/2,z:frontZ-d/2,w:.05,d:d,h:h},
+            {x:w/2,z:frontZ-d/2,w:.05,d:d,h:h},
+            {x:-w/2,z:frontZ,w:.05,d:.05,h:h},
+            {x:w/2,z:frontZ,w:.05,d:.05,h:h},
+            {x:-w/2,z:frontZ-d,w:.05,d:.05,h:h},
+            {x:w/2,z:frontZ-d,w:.05,d:.05,h:h}
+        ].forEach(f=>{
+            originalFrameCadIds.push(cadObjects.length);
+            cadObjects.push({t:'frame',x:f.x,z:f.z,w:f.w,d:f.d,r:0,h:f.h,original:true});
+        });
+
+        originalFrameMeshes=[topFrameFront,topFrameBack,topFrameLeft,topFrameRight,frontLeftFrame,frontRightFrame,backLeftFrame,backRightFrame];
+
+        // 備品をまとめる親グループ
+        const equipmentsGroup = new THREE.Group();
+        scene.add(equipmentsGroup);
+
+        // --- ユニットカウンター ---
+        const counterW = 0.9, counterH = 0.9, counterD = 0.45;
+        const counterGroup = new THREE.Group();
+        counterGroup.position.set(w/2 - 0.45, 0, d/4);
+        
+        const counterBody = new THREE.Mesh(new THREE.BoxGeometry(counterW, counterH - 0.03, counterD), wallMat);
+        counterBody.position.set(0, (counterH - 0.03)/2, 0);
+        counterBody.castShadow = true; counterBody.receiveShadow = true; counterGroup.add(counterBody);
+        
+        const topMat = new THREE.MeshStandardMaterial({ color: 0x4a3c31, roughness: 0.6 });
+        const counterTop = new THREE.Mesh(new THREE.BoxGeometry(counterW + 0.02, 0.03, counterD + 0.02), topMat);
+        counterTop.position.set(0, counterH - 0.015, 0);
+        counterTop.castShadow = true; counterTop.receiveShadow = true; counterGroup.add(counterTop);
+
+        // --- PC機器・モニター ---
+        const pcGroup = new THREE.Group();
+        const pcBase = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.01, 0.15), new THREE.MeshStandardMaterial({color: 0x111111, roughness: 0.5}));
+        pcBase.position.set(0, 0.005, 0); pcBase.castShadow = true; pcGroup.add(pcBase);
+        const pcNeck = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.02), new THREE.MeshStandardMaterial({color: 0x222222}));
+        pcNeck.position.set(0, 0.05, -0.04); pcNeck.castShadow = true; pcGroup.add(pcNeck);
+        const pcBody = new THREE.Mesh(new THREE.BoxGeometry(0.53, 0.31, 0.02), new THREE.MeshStandardMaterial({color: 0x151515, roughness: 0.6}));
+        pcBody.position.set(0, 0.22, -0.03); pcBody.castShadow = true; pcGroup.add(pcBody);
+
+        const pcScreenW = 0.51, pcScreenH = 0.29;
+        const pcScreenMat = new THREE.MeshStandardMaterial({color: 0x020202, roughness: 0.1, metalness: 0.8, emissive: 0x000000, emissiveIntensity: 1.0});
+        const pcScreen = new THREE.Mesh(new THREE.PlaneGeometry(pcScreenW, pcScreenH), pcScreenMat);
+        pcScreen.position.set(0, 0.22, -0.019); 
+        pcGroup.add(pcScreen);
+        const pcScreenObj = { mesh: pcScreen, mat: pcScreenMat };
+
+        pcGroup.position.set(w/2 - 0.45, 0.9, d/4);
+        pcGroup.rotation.y = -Math.PI / 7;
+
+        const standardEquip = new THREE.Group();
+        standardEquip.add(counterGroup);
+        standardEquip.add(pcGroup);
+        equipmentsGroup.add(standardEquip);
+
+        // --- 追加ブースタイプの簡易モデル ---
+        const businessEquip = new THREE.Group();
+        const mTable = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.7, 32), frameMat);
+        mTable.position.set(0, 0.35, 0); mTable.castShadow = true; mTable.receiveShadow = true;
+        businessEquip.add(mTable);
+        const cMat = new THREE.MeshStandardMaterial({color: 0x444444});
+        const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.35), cMat);
+        c1.position.set(-0.6, 0.225, 0); c1.castShadow = true; businessEquip.add(c1);
+        const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.35), cMat);
+        c2.position.set(0.6, 0.225, 0); c2.castShadow = true; businessEquip.add(c2);
+        businessEquip.visible = false;
+        equipmentsGroup.add(businessEquip);
+
+        const exhibitionEquip = new THREE.Group();
+        const eBase1 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 0.8), wallMat);
+        eBase1.position.set(0, 0.2, 0); eBase1.castShadow = true; exhibitionEquip.add(eBase1);
+        const eBase2 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.3, 0.5), frameMat);
+        eBase2.position.set(0, 0.55, -0.15); eBase2.castShadow = true; exhibitionEquip.add(eBase2);
+        exhibitionEquip.visible = false;
+        equipmentsGroup.add(exhibitionEquip);
+
+        const experienceEquip = new THREE.Group();
+        const tDesk = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.6), wallMat);
+        tDesk.position.set(0, 0.35, 0); tDesk.castShadow = true; experienceEquip.add(tDesk);
+        const tMon = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.05), new THREE.MeshStandardMaterial({color: 0x111111}));
+        tMon.position.set(0, 1.0, -0.2); tMon.castShadow = true; experienceEquip.add(tMon);
+        experienceEquip.visible = false;
+        equipmentsGroup.add(experienceEquip);
+
+        const seminarEquip = new THREE.Group();
+        const podium = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.0, 0.4), wallMat);
+        podium.position.set(0.8, 0.5, -0.4); podium.castShadow = true; seminarEquip.add(podium);
+        const screenGeo = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0xcccccc}));
+        screenGeo.position.set(0, 1.5, -0.8); seminarEquip.add(screenGeo);
+        for(let i=0; i<3; i++) {
+            for(let j=0; j<2; j++) {
+                const chair = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), cMat);
+                chair.position.set(-0.5 + i*0.5, 0.2, 0.2 + j*0.5); chair.castShadow = true;
+                seminarEquip.add(chair);
+            }
+        }
+        seminarEquip.visible = false;
+        equipmentsGroup.add(seminarEquip);
+
+        // --- 天井スポットライト ---
+        const spotLights = [];
+        const lightGeo = new THREE.ConeGeometry(0.06, 0.12, 16);
+        const lightMat = new THREE.MeshStandardMaterial({color: 0x222222, emissive: 0x330000}); 
+        
+        for(let i=-1; i<=1; i+=2) {
+            const spotMesh = new THREE.Mesh(lightGeo, lightMat);
+            spotMesh.position.set(i * 0.8, h - 0.06, frontZ - d/2); // ★修正
+            scene.add(spotMesh);
+
+            const spotLight = new THREE.SpotLight(0xffeedd, 1.0, 0, Math.PI/5, 0.4, 1);
+            spotLight.position.set(i * 0.8, h - 0.1, frontZ - d/2); // ★修正
+            spotLight.target.position.set(i * 0.8, h/2, frontZ - d); // ★修正
+            spotLight.castShadow = true;
+            scene.add(spotLight);
+            scene.add(spotLight.target);
+            spotLights.push(spotLight);
+        }
+
+        let isLightOn = true;
+        let currentIntensity = 1.0;
+
+        document.getElementById('toggleLight').addEventListener('click', () => {
+            isLightOn = !isLightOn;
+            spotLights.forEach(light => { light.intensity = isLightOn ? currentIntensity : 0; });
+            lightMat.emissive.setHex(isLightOn ? 0x330000 : 0x000000); 
+        });
+
+        document.getElementById('lightIntensity').addEventListener('input', (e) => {
+            currentIntensity = parseFloat(e.target.value);
+            if(isLightOn) {
+                spotLights.forEach(light => { light.intensity = currentIntensity; });
+            }
+        });
+
+        // --- 看板（サイン） ---
+        const signW = 1.8, signH = 0.2;
+        const signBase = new THREE.Mesh(new THREE.BoxGeometry(signW, signH, 0.02), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+        signBase.position.set(0, h - signH/2, frontZ); // ★修正
+        signBase.castShadow = true; scene.add(signBase);
+
+        const signImgMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, side: THREE.FrontSide });
+        const signImgMesh = new THREE.Mesh(new THREE.PlaneGeometry(signW, signH), signImgMat);
+        signImgMesh.position.set(0, 0, 0.011);
+        signBase.add(signImgMesh);
+        const signObj = { mesh: signImgMesh, mat: signImgMat };
+
+        const signBottomFrame = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, 0.05), frameMat);
+        signBottomFrame.position.set(0, h - signH, frontZ); // ★修正
+        scene.add(signBottomFrame);
+        const signLeftFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, signH, 0.05), frameMat);
+        signLeftFrame.position.set(-signW/2, h - signH/2, frontZ); // ★修正
+        scene.add(signLeftFrame);
+        const signRightFrame = new THREE.Mesh(new THREE.BoxGeometry(0.05, signH, 0.05), frameMat);
+        signRightFrame.position.set(signW/2, h - signH/2, frontZ); // ★修正
+        scene.add(signRightFrame);
+
+        // --- カタログスタンド（A4チラシ3段・リアル3Dモデル） ---
+        // 実物の展示会用パンフレットラックをイメージした、金属フレーム＋透明ポケット構造。
+        const standGroup = new THREE.Group();
+        standGroup.position.set(-w/3, 0, frontZ - 0.4);
+        standGroup.rotation.y = Math.PI / 6;
+
+        const standMetalMat = new THREE.MeshStandardMaterial({
+            color: 0x4a4f54, metalness: 0.78, roughness: 0.28
+        });
+        const standMetalHiMat = new THREE.MeshStandardMaterial({
+            color: 0x8b9298, metalness: 0.88, roughness: 0.20
+        });
+        const standDarkMat = new THREE.MeshStandardMaterial({
+            color: 0x22262a, metalness: 0.55, roughness: 0.38
+        });
+        const acrylicMat = new THREE.MeshPhysicalMaterial({
+            color: 0xbfd3dc, transparent: true, opacity: 0.34,
+            roughness: 0.12, metalness: 0.02, transmission: 0.12,
+            side: THREE.FrontSide
+        });
+
+        function standBox(wd, hh, dd, x, y, z, mat) {
+            const q = new THREE.Mesh(new THREE.BoxGeometry(wd, hh, dd), mat);
+            q.position.set(x, y, z);
+            q.castShadow = true;
+            q.receiveShadow = true;
+            standGroup.add(q);
+            return q;
+        }
+
+        // 安定感のある角型ベース＋滑り止め脚
+        standBox(.46, .055, .38, 0, .0275, 0, standDarkMat);
+        [[-.18,-.13],[.18,-.13],[-.18,.13],[.18,.13]].forEach(p=>{
+            const foot = new THREE.Mesh(new THREE.CylinderGeometry(.028,.032,.025,20), standDarkMat);
+            foot.position.set(p[0], .012, p[1]);
+            foot.castShadow = true;
+            standGroup.add(foot);
+        });
+
+        // 後方の支柱と上部ヘッダー
+        const rearPoleL = new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,1.72,20), standMetalMat);
+        rearPoleL.position.set(-.165,.86,-.10);
+        rearPoleL.castShadow = true; standGroup.add(rearPoleL);
+        const rearPoleR = rearPoleL.clone();
+        rearPoleR.position.x=.165; standGroup.add(rearPoleR);
+        standBox(.39,.055,.055,0,1.70,-.10,standMetalHiMat);
+
+        // A4ポケット：3段。少し前傾させ、前面の透明アクリルと下部リップでチラシを保持。
+        const flyerW = 0.21, flyerH = 0.297;
+        const pocketW = .275, pocketH = .245, pocketD = .070;
+        const pocketRotX = -Math.PI/14;
+        const pocketYs = [.94,.64,.34];
+
+        function createFlyerSlot(index, offsetY) {
+            const pocket = new THREE.Group();
+            pocket.position.set(0, offsetY, -.015);
+            pocket.rotation.x = pocketRotX;
+            standGroup.add(pocket);
+
+            // 背板
+            const back = new THREE.Mesh(
+                new THREE.BoxGeometry(pocketW,.245,.018), standDarkMat
+            );
+            back.position.set(0,.035,-.035);
+            back.castShadow=true; back.receiveShadow=true;
+            pocket.add(back);
+
+            // 左右の側板
+            [-1,1].forEach(side=>{
+                const sidePanel = new THREE.Mesh(
+                    new THREE.BoxGeometry(.018,.245,.075), standMetalMat
+                );
+                sidePanel.position.set(side*(pocketW/2-.009),.035,.0);
+                sidePanel.castShadow=true;
+                pocket.add(sidePanel);
+            });
+
+            // 透明フロントパネル
+            const acrylic = new THREE.Mesh(
+                new THREE.BoxGeometry(pocketW-.025,.205,.010), acrylicMat
+            );
+            acrylic.position.set(0,.055,.035);
+            acrylic.castShadow=true;
+            pocket.add(acrylic);
+
+            // チラシが落ちないための下部リップ
+            const lip = new THREE.Mesh(
+                new THREE.BoxGeometry(pocketW,.040,.030), standMetalHiMat
+            );
+            lip.position.set(0,-.055,.055);
+            lip.castShadow=true;
+            pocket.add(lip);
+
+            // A4チラシ。ポケット内部に少し沈め、上端だけが見える位置にする。
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0xffffff, side: THREE.DoubleSide, roughness: .72
+            });
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(flyerW, flyerH), mat);
+            mesh.position.set(0,.075,.010);
+            mesh.rotation.x = -Math.PI/2;
+            mesh.rotation.x = pocketRotX;
+            mesh.position.z = .020;
+            pocket.add(mesh);
+
+            return { mesh, mat, pocket };
+        }
+
+        const flyerTopObj = createFlyerSlot(0, pocketYs[0]);
+        const flyerMidObj = createFlyerSlot(1, pocketYs[1]);
+        const flyerBotObj = createFlyerSlot(2, pocketYs[2]);
+
+        // 下部から背面へつながる補強バー
+        standBox(.045,.72,.045,-.165,.82,-.10,standMetalMat);
+        standBox(.045,.72,.045,.165,.82,-.10,standMetalMat);
+        standBox(.36,.040,.040,0,.19,-.10,standMetalHiMat);
+
+        // standGroupはCAD配置時に複製するテンプレート。シーンへ直接追加すると固定位置に残るため追加しない。
+
+        // --- ポスター ---
+        const posterW = 0.841, posterH = 1.189, posterBaseY = h/2 + 0.1;
+        function createPoster(x, y, z, rotationY) {
+            const mat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(posterW, posterH), mat);
+            mesh.position.set(x, y, z); mesh.rotation.y = rotationY; scene.add(mesh);
+            return { mesh, mat };
+        }
+        const posters = {
+            backLeft:   createPoster(-w/3, posterBaseY, frontZ - d + 0.0002, 0), // ★修正
+            backCenter: createPoster(0,    posterBaseY, frontZ - d + 0.0002, 0), // ★修正
+            backRight:  createPoster(w/3,  posterBaseY, frontZ - d + 0.0002, 0), // ★修正
+            leftWall:   createPoster(-w/2 + 0.0002, posterBaseY, frontZ - d/2, Math.PI / 2), // ★修正
+            rightWall:  createPoster(w/2 - 0.001,  posterBaseY, frontZ - d/2, -Math.PI / 2) // ★修正
+        };
+
+        // --- 展示パネル ---
+        const exhibitionPanelGroup = new THREE.Group();
+        const exhibitionPanel = new THREE.Mesh(
+            new THREE.BoxGeometry(1.0, 2.1, 0.08),
+            new THREE.MeshStandardMaterial({color: 0xf5f5f5, roughness: 0.8})
+        );
+        exhibitionPanel.position.set(0, 1.05, -0.45);
+        exhibitionPanel.castShadow = true; exhibitionPanel.receiveShadow = true;
+        exhibitionPanelGroup.add(exhibitionPanel);
+        exhibitionPanelGroup.visible = false;
+
+        // --- 追加機能のイベント処理 ---
+
+        document.getElementById('boothType').addEventListener('change', (e) => {
+            standardEquip.visible = false; businessEquip.visible = false;
+            exhibitionEquip.visible = false; experienceEquip.visible = false; seminarEquip.visible = false;
+            
+            const v = e.target.value;
+            if(v === 'standard') standardEquip.visible = true;
+            if(v === 'business') businessEquip.visible = true;
+            if(v === 'exhibition') exhibitionEquip.visible = true;
+            if(v === 'experience') experienceEquip.visible = true;
+            if(v === 'seminar') seminarEquip.visible = true;
+        });
+
+        function applyWallVisibility() {
+            const l = document.getElementById('checkLeftWall').checked;
+            const r = document.getElementById('checkRightWall').checked;
+            const b = document.getElementById('checkBackWall').checked;
+            
+            leftWall.visible = l; posters.leftWall.mesh.visible = l;
+            rightWall.visible = r; posters.rightWall.mesh.visible = r;
+            backWall.visible = b; posters.backLeft.mesh.visible = b; posters.backCenter.mesh.visible = b; posters.backRight.mesh.visible = b;
+        }
+
+        document.getElementById('openType').addEventListener('change', (e) => {
+            const v = e.target.value;
+            const cL = document.getElementById('checkLeftWall');
+            const cR = document.getElementById('checkRightWall');
+            const cB = document.getElementById('checkBackWall');
+            
+            cL.checked = true; cR.checked = true; cB.checked = true;
+            if(v === '2') { cR.checked = false; }
+            if(v === '3') { cL.checked = false; cR.checked = false; }
+            if(v === '4') { cL.checked = false; cR.checked = false; cB.checked = false; }
+            applyWallVisibility();
+        });
+
+        document.getElementById('checkLeftWall').addEventListener('change', applyWallVisibility);
+        document.getElementById('checkRightWall').addEventListener('change', applyWallVisibility);
+        document.getElementById('checkBackWall').addEventListener('change', applyWallVisibility);
+
+        // 小間寸法の再計算
+        document.getElementById('applySizeBtn').addEventListener('click', () => {
+            const uW = parseFloat(document.getElementById('unitW').value);
+            const uD = parseFloat(document.getElementById('unitD').value);
+            const cW = parseInt(document.getElementById('countW').value);
+            const cD = parseInt(document.getElementById('countD').value);
+            
+            w = uW * cW;
+            d = uD * cD;
+
+            if(!originalFrameMoved){
+                const defs=[
+                    {x:0,z:-d/2,w:w,d:.05},{x:0,z:d/2,w:w,d:.05},
+                    {x:-w/2,z:0,w:.05,d:d},{x:w/2,z:0,w:.05,d:d},
+                    {x:-w/2,z:-d/2,w:.05,d:.05},{x:w/2,z:-d/2,w:.05,d:.05},
+                    {x:-w/2,z:d/2,w:.05,d:.05},{x:w/2,z:d/2,w:.05,d:.05}
+                ];
+                defs.forEach((f,i)=>{
+                    const o=cadObjects[originalFrameCadIds[i]];
+                    if(o){o.x=f.x;o.z=f.z;o.w=f.w;o.d=f.d;o.h=h}
+                });
+            }
+
+            // 左側メニューの寸法をCADにも反映
+            cadW = w;
+            cadD = d;
+            document.getElementById('cadW').value = w.toFixed(2);
+            document.getElementById('cadD').value = d.toFixed(2);
+            drawCad();
+
+            // ★修正箇所: 固定した前面のZ座標を基準に再計算する
+            floor.geometry.dispose(); floor.geometry = new THREE.PlaneGeometry(w, d);
+            floor.position.z = frontZ - d/2;
+
+            backWall.geometry.dispose(); backWall.geometry = new THREE.BoxGeometry(w + wallThickness*2, h, wallThickness);
+            backWall.position.set(0, h/2, frontZ - d - wallThickness/2);
+            
+            leftWall.geometry.dispose(); leftWall.geometry = new THREE.BoxGeometry(wallThickness, h, d);
+            leftWall.position.set(-w/2 - wallThickness/2, h/2, frontZ - d/2);
+            
+            rightWall.geometry.dispose(); rightWall.geometry = new THREE.BoxGeometry(wallThickness, h, d);
+            rightWall.position.set(w/2 + wallThickness/2, h/2, frontZ - d/2);
+
+            topFrameFront.geometry.dispose(); topFrameFront.geometry = new THREE.BoxGeometry(w, 0.05, 0.05);
+            topFrameFront.position.set(0, h, frontZ);
+            
+            topFrameCenter.geometry.dispose(); topFrameCenter.geometry = new THREE.BoxGeometry(0.05, 0.05, d);
+            topFrameCenter.position.set(0, h, frontZ - d/2);
+
+            frontLeftFrame.position.set(-w/2, h/2, frontZ);
+            frontRightFrame.position.set(w/2, h/2, frontZ);
+
+            backLeftFrame.position.set(-w/2, h/2, frontZ - d);
+            backRightFrame.position.set(w/2, h/2, frontZ - d);
+
+            topFrameBack.geometry.dispose(); topFrameBack.geometry = new THREE.BoxGeometry(w, 0.05, 0.05);
+            topFrameBack.position.set(0, h, frontZ - d);
+
+            topFrameLeft.geometry.dispose(); topFrameLeft.geometry = new THREE.BoxGeometry(0.05, 0.05, d);
+            topFrameLeft.position.set(-w/2, h, frontZ - d/2);
+
+            topFrameRight.geometry.dispose(); topFrameRight.geometry = new THREE.BoxGeometry(0.05, 0.05, d);
+            topFrameRight.position.set(w/2, h, frontZ - d/2);
+
+            signBottomFrame.geometry.dispose(); signBottomFrame.geometry = new THREE.BoxGeometry(w, 0.05, 0.05);
+            signBottomFrame.position.set(0, h - signH, frontZ);
+            signLeftFrame.position.set(-signW/2, h - signH/2, frontZ);
+            signRightFrame.position.set(signW/2, h - signH/2, frontZ);
+
+            posters.backLeft.mesh.position.set(-w/3, posterBaseY, frontZ - d + 0.001);
+            posters.backCenter.mesh.position.set(0, posterBaseY, frontZ - d + 0.001);
+            posters.backRight.mesh.position.set(w/3, posterBaseY, frontZ - d + 0.001);
+            posters.leftWall.mesh.position.set(-w/2 + 0.001, posterBaseY, frontZ - d/2);
+            posters.rightWall.mesh.position.set(w/2 - 0.001, posterBaseY, frontZ - d/2);
+        });
+
+        // 備品の個別表示と位置変更スライダー
+        document.getElementById('checkEquip').addEventListener('change', (e) => equipmentsGroup.visible = e.target.checked);
+        document.getElementById('posEquipX').addEventListener('input', (e) => equipmentsGroup.position.x = parseFloat(e.target.value));
+        document.getElementById('posEquipZ').addEventListener('input', (e) => equipmentsGroup.position.z = parseFloat(e.target.value));
+        
+        document.getElementById('checkStand').addEventListener('change', (e) => standGroup.visible = e.target.checked);
+        document.getElementById('posStandX').addEventListener('input', (e) => standGroup.position.x = parseFloat(e.target.value));
+        document.getElementById('posStandZ').addEventListener('input', (e) => standGroup.position.z = parseFloat(e.target.value));
+
+        document.getElementById('posPosterX').addEventListener('input', (e) => {
+            const v = parseFloat(e.target.value);
+            Object.values(posters).forEach(p => p.mesh.position.x += v);
+        });
+        document.getElementById('posPosterZ').addEventListener('input', (e) => {
+            const v = parseFloat(e.target.value);
+            Object.values(posters).forEach(p => p.mesh.position.z += v);
+        });
+
+
+        // --- 画像処理共通関数 ---
+        const savedDesign = { isLightOn: true, images: {} };
+        const imageRestorers = {};
+
+        function setupImageUpload(inputId, clearId, targetObj, defaultW, defaultH, maintainAspect, isPcScreen) {
+            const input = document.getElementById(inputId);
+            const clearBtn = document.getElementById(clearId);
+
+            function applyImage(dataUrl) {
+                const texture = new THREE.TextureLoader().load(dataUrl);
+                texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                targetObj.mat.map = texture;
+                // 画像は表面からだけ表示し、裏側への透過・裏写りを防ぐ。
+                targetObj.mat.side = THREE.FrontSide;
+                
+                if (isPcScreen) {
+                    targetObj.mat.emissiveMap = texture;
+                    targetObj.mat.emissive.setHex(0xffffff);
+                }
+
+                targetObj.mat.needsUpdate = true;
+                targetObj.mat.color.setHex(0xffffff); 
+                if (maintainAspect) {
+                    const image = new Image(); image.src = dataUrl;
+                    image.onload = () => {
+                        const aspect = image.width / image.height;
+                        targetObj.mesh.scale.x = (defaultH * aspect) / defaultW; 
+                    };
+                }
+                savedDesign.images[inputId] = dataUrl; 
+            }
+
+            imageRestorers[inputId] = applyImage; 
+
+            input.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => applyImage(e.target.result);
+                reader.readAsDataURL(file);
+            });
+
+            clearBtn.addEventListener('click', () => {
+                input.value = ""; targetObj.mat.map = null; 
+                if (isPcScreen) { targetObj.mat.emissiveMap = null; targetObj.mat.emissive.setHex(0x000000); }
+                targetObj.mat.needsUpdate = true; targetObj.mesh.scale.set(1, 1, 1); 
+                delete savedDesign.images[inputId]; 
+            });
+        }
+
+        setupImageUpload('uploadPcScreen', 'clearPcScreen', pcScreenObj, pcScreenW, pcScreenH, false, true);
+        setupImageUpload('uploadSign', 'clearSign', signObj, signW, signH, false);
+        setupImageUpload('uploadFlyerTop', 'clearFlyerTop', flyerTopObj, flyerW, flyerH, true);
+        setupImageUpload('uploadFlyerMid', 'clearFlyerMid', flyerMidObj, flyerW, flyerH, true);
+        setupImageUpload('uploadFlyerBot', 'clearFlyerBot', flyerBotObj, flyerW, flyerH, true);
+        setupImageUpload('uploadBackLeft', 'clearBackLeft', posters.backLeft, posterW, posterH, true);
+        setupImageUpload('uploadBackCenter', 'clearBackCenter', posters.backCenter, posterW, posterH, true);
+        setupImageUpload('uploadBackRight', 'clearBackRight', posters.backRight, posterW, posterH, true);
+        setupImageUpload('uploadLeft', 'clearLeft', posters.leftWall, posterW, posterH, true);
+        setupImageUpload('uploadRight', 'clearRight', posters.rightWall, posterW, posterH, true);
+
+        // CADモニター画像のアップロード／削除（選択中のモニター・壁面モニターに適用）
+        const cadMonitorImageCache = {};
+        document.getElementById('cadMonitorImage').addEventListener('change',e=>{
+            const file=e.target.files[0];
+            if(!file)return;
+            if(cadSelected<0 || !['monitor','wallmonitor','signage'].includes(cadObjects[cadSelected].t)){
+                alert('先に2D CAD上で「モニター」「壁面モニター」または「デジタルサイネージ」を選択してください。'); e.target.value=''; return;
+            }
+            const target=cadObjects[cadSelected];
+            const reader=new FileReader();
+            reader.onload=ev=>{
+                const dataUrl=ev.target.result; target._monitorImage=dataUrl;
+                const img=new Image();
+                img.onload=()=>{cadMonitorImageCache[dataUrl]=img; drawCad(); refreshCad3D(); cadPanel.style.display='flex';};
+                img.onerror=()=>alert('モニター画像の読み込みに失敗しました。');
+                img.src=dataUrl; e.target.value='';
+            };
+            reader.readAsDataURL(file);
+        });
+        document.getElementById('cadMonitorImageClear').addEventListener('click',()=>{
+            if(cadSelected>=0 && ['monitor','wallmonitor','signage'].includes(cadObjects[cadSelected].t)){
+                delete cadObjects[cadSelected]._monitorImage;drawCad();refreshCad3D();cadPanel.style.display='flex';
+            }
+            document.getElementById('cadMonitorImage').value='';
+        });
+
+        // --- レイアウト保存・読み込み ---
+        // CADオブジェクト、ブース寸法、平面図、表示倍率、スナップ設定、
+        // 既存の画像データを1つのJSONにまとめて保存する。
+        function collectLayoutData(){
+            savedDesign.isLightOn = isLightOn;
+            savedDesign.cadObjects = JSON.parse(JSON.stringify(cadObjects));
+            savedDesign.cadW = cadW;
+            savedDesign.cadD = cadD;
+            savedDesign.cadFromScratch = cadFromScratch;
+            savedDesign.cadFloorplanDataUrl = cadFloorplanDataUrl || "";
+            savedDesign.cadFloorplanOpacity = cadFloorplanOpacity;
+            savedDesign.cadZoom = cadZoom;
+            savedDesign.cadSnap = !!document.getElementById('cadSnap')?.checked;
+            savedDesign.cadFrameH = document.getElementById('cadFrameH')?.value || '2.70';
+            savedDesign.cadFrameW = document.getElementById('cadFrameW')?.value || '2.00';
+            return savedDesign;
+        }
+
+        document.getElementById('saveDesignBtn').addEventListener('click', () => {
+            try {
+                const dataStr = JSON.stringify(collectLayoutData());
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'booth_layout.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                alert('レイアウトを保存しました。');
+            } catch (e) {
+                console.error(e);
+                alert('レイアウトの保存に失敗しました。画像の容量が大きすぎる可能性があります。');
+            }
+        });
+
+        const importInput = document.createElement('input');
+        importInput.type = 'file';
+        importInput.accept = '.json,application/json';
+        importInput.style.position = 'fixed';
+        importInput.style.left = '-10000px';
+        importInput.style.width = '1px';
+        importInput.style.height = '1px';
+        importInput.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(importInput);
+
+        document.getElementById('loadDesignBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            // ファイル選択はボタンクリックの同期イベント内で開く。
+            importInput.click();
+        });
+
+        importInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+
+                    // CADレイアウトを復元
+                    if (Array.isArray(data.cadObjects)) {
+                        cadObjects = data.cadObjects;
+                        cadSelected = -1;
+                        cadW = Number(data.cadW) || 9;
+                        cadD = Number(data.cadD) || 3;
+                        cadFromScratch = data.cadFromScratch !== undefined ? !!data.cadFromScratch : true;
+
+                        document.getElementById('cadW').value = cadW.toFixed(2);
+                        document.getElementById('cadD').value = cadD.toFixed(2);
+
+                        if (data.cadFrameH !== undefined) document.getElementById('cadFrameH').value = data.cadFrameH;
+                        if (data.cadFrameW !== undefined) document.getElementById('cadFrameW').value = data.cadFrameW;
+                        if (data.cadSnap !== undefined) document.getElementById('cadSnap').checked = !!data.cadSnap;
+
+                        if (data.cadZoom !== undefined) {
+                            setCadZoom(Number(data.cadZoom) || 1);
+                        } else {
+                            drawCad();
+                        }
+                    }
+
+                    // 平面図画像を復元
+                    cadFloorplanDataUrl = data.cadFloorplanDataUrl || "";
+                    cadFloorplanOpacity = Number(data.cadFloorplanOpacity);
+                    if (!isFinite(cadFloorplanOpacity)) cadFloorplanOpacity = 0.45;
+                    cadFloorplanOpacity = Math.max(0, Math.min(1, cadFloorplanOpacity));
+
+                    document.getElementById('cadFloorplanOpacity').value = Math.round(cadFloorplanOpacity * 100);
+                    document.getElementById('cadFloorplanOpacityValue').textContent = Math.round(cadFloorplanOpacity * 100) + '%';
+
+                    if (cadFloorplanDataUrl) {
+                        const img = new Image();
+                        img.onload = () => {
+                            cadFloorplanImage = img;
+                            drawCad();
+                            refreshCad3D();
+                        };
+                        img.src = cadFloorplanDataUrl;
+                    } else {
+                        cadFloorplanImage = null;
+                        drawCad();
+                        refreshCad3D();
+                    }
+
+                    // ライト状態を復元
+                    if (data.isLightOn !== undefined && data.isLightOn !== isLightOn) {
+                        isLightOn = !!data.isLightOn;
+                        spotLights.forEach(light => { light.intensity = isLightOn ? currentIntensity : 0; });
+                        lightMat.emissive.setHex(isLightOn ? 0x330000 : 0x000000);
+                        document.getElementById('toggleLight').textContent = isLightOn ? '💡 スポットライト ON/OFF' : '💡 スポットライト OFF';
+                    }
+
+                    // 通常の画像データを復元
+                    if (data.images && typeof data.images === 'object') {
+                        for (const inputId in data.images) {
+                            if (imageRestorers[inputId] && data.images[inputId]) {
+                                imageRestorers[inputId](data.images[inputId]);
+                            }
+                        }
+                    }
+
+                    // CAD画像（梁看板・ポスター）はcadObjects内のData URLとして復元済み。
+                    // 3Dを再生成して、読み込んだレイアウトを即時反映する。
+                    drawCad();
+                    refreshCad3D();
+
+                    alert('レイアウトを読み込みました。');
+                } catch(err) {
+                    console.error('レイアウトJSONの読み込みエラー:', err);
+                    alert('読み込みに失敗しました。保存機能で書き出した booth_layout.json を選択してください。\n詳細：' + (err && err.message ? err.message : 'JSON形式を確認してください。'));
+                }
+
+                importInput.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+
+        // レイアウト確認シート（CAD平面図＋正面・側面・上面・俯瞰）をPDF出力
+        document.getElementById('exportLayoutPdfBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('exportLayoutPdfBtn');
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                alert('PDF出力ライブラリを読み込めませんでした。インターネット接続を確認して再度お試しください。');
+                return;
+            }
+            const enteredTitle = window.prompt('レイアウト図のタイトルを入力してください。', 'ブース レイアウト確認シート');
+            if (enteredTitle === null) return;
+            const layoutName = enteredTitle.trim() || 'ブース レイアウト確認シート';
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = '画像を準備中...';
+            try {
+                const now = new Date();
+                const dateText = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+
+                // 2D CAD画像を、選択中部材の強調表示なしで取得
+                const selectedBefore = cadSelected;
+                const namesBefore = cadShowItemNames, dimsBefore = cadShowItemDims;
+                cadSelected = -1;
+                cadShowItemNames = true; cadShowItemDims = true; drawCad();
+                const cadImage = cadCanvas.toDataURL('image/png');
+                cadShowItemNames = false; cadShowItemDims = true; drawCad();
+                const cadImageNoNames = cadCanvas.toDataURL('image/png');
+                cadShowItemDims = false; drawCad();
+                const cadImageNoNamesNoDims = cadCanvas.toDataURL('image/png');
+                cadShowItemNames = true; drawCad();
+                const cadImageNamesNoDims = cadCanvas.toDataURL('image/png');
+                cadShowItemNames = namesBefore; cadShowItemDims = dimsBefore;
+                cadSelected = selectedBefore; drawCad();
+
+                // 3Dカメラ位置を切り替えて各ビューを撮影し、最後に元の視点へ戻す
+                const oldPosition = camera.position.clone();
+                const oldQuaternion = camera.quaternion.clone();
+                const oldUp = camera.up.clone();
+                const oldTarget = controls.target.clone();
+                const oldAspect = camera.aspect;
+                const target = new THREE.Vector3(0, 1.2, 0);
+                const span = Math.max(cadW || 9, cadD || 3, 4);
+                const distance = span * 0.95 + 2.5;
+                const views = [
+                    { key: 'front', label: '正面図', pos: new THREE.Vector3(0, 2.0, distance), up: new THREE.Vector3(0,1,0) },
+                    { key: 'side', label: '側面図', pos: new THREE.Vector3(distance, 2.0, 0), up: new THREE.Vector3(0,1,0) },
+                    { key: 'top', label: '上面図', pos: new THREE.Vector3(0, span * 0.85 + 2, 0), up: new THREE.Vector3(0,0,-1) },
+                    { key: 'overview', label: '俯瞰図', pos: new THREE.Vector3(distance * 0.78, distance * 0.72, distance), up: new THREE.Vector3(0,1,0) }
+                ];
+                const captures = { cad: cadImage };
+                try {
+                    renderer.setSize(1000, 650, false);
+                    camera.aspect = 1000 / 650;
+                    camera.updateProjectionMatrix();
+                    for (const view of views) {
+                        camera.up.copy(view.up);
+                        camera.position.copy(view.pos);
+                        camera.lookAt(target);
+                        controls.target.copy(target);
+                        controls.update();
+                        renderer.render(scene, camera);
+                        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                        renderer.render(scene, camera);
+                        captures[view.key] = renderer.domElement.toDataURL('image/png');
+                    }
+                } finally {
+                    camera.position.copy(oldPosition);
+                    camera.quaternion.copy(oldQuaternion);
+                    camera.up.copy(oldUp);
+                    camera.aspect = oldAspect;
+                    camera.updateProjectionMatrix();
+                    controls.target.copy(oldTarget);
+                    controls.update();
+                    renderer.setSize(window.innerWidth, window.innerHeight, false);
+                    renderer.render(scene, camera);
+                }
+
+                const { jsPDF } = window.jspdf;
+                const pageW = 420, pageH = 297, margin = 10;
+                // PDFとプレビューで共通の配置（mm単位）。画像ごとに倍率と位置を独立調整できます。
+                const boxes = {
+                    cad: { label:'2D CAD 平面レイアウト', x:13, y:39, w:188, h:231 },
+                    // 見出しと画像の間に十分な余白を確保し、見出しが画像に重ならない配置
+                    front: { label:'正面図', x:216, y:42, w:89, h:96 },
+                    side: { label:'側面図', x:316, y:42, w:89, h:96 },
+                    top: { label:'上面図', x:216, y:165, w:89, h:96 },
+                    overview: { label:'俯瞰図', x:316, y:165, w:89, h:96 }
+                };
+                const imageLabels = { cad:'CAD平面図', front:'正面図', side:'側面図', top:'上面図', overview:'俯瞰図' };
+                const images = {};
+                for (const [key, dataUrl] of Object.entries(captures)) {
+                    images[key] = await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = dataUrl;
+                    });
+                }
+                images.cadNoNames = await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=cadImageNoNames;});
+                images.cadNoNamesNoDims = await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=cadImageNoNamesNoDims;});
+                images.cadNamesNoDims = await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=cadImageNamesNoDims;});
+                let pdfShowItemNames = true, pdfShowItemDims = true;
+                const settings = {};
+                for (const key of Object.keys(boxes)) settings[key] = { scale:100, x:0, y:0 };
+
+                // 調整画面を作成。プレビューはPDFと同じ配置・画像比率で随時更新。
+                const overlay = document.createElement('div');
+                overlay.id = 'layoutPdfAdjustOverlay';
+                overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;font-family:sans-serif;color:#222;';
+                overlay.innerHTML = `
+                  <div style="background:#fff;border-radius:10px;width:min(1500px,98vw);height:min(94vh,1000px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 35px rgba(0,0,0,.45)">
+                    <div style="padding:12px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                      <strong style="font-size:16px">レイアウト確認シートの調整</strong>
+                      <label style="font-size:13px">タイトル <input id="layoutPdfTitle" type="text" style="width:min(420px,45vw);padding:6px" /></label>
+                      <label style="font-size:13px;white-space:nowrap"><input id="layoutPdfShowNames" type="checkbox" checked> PDFにアイテム名を表示</label>
+                      <label style="font-size:13px;white-space:nowrap"><input id="layoutPdfShowDims" type="checkbox" checked> PDFに寸法を表示</label>
+                      <span style="font-size:12px;color:#555">各画像の倍率・上下左右の位置を調整してください。</span>
+                    </div>
+                    <div style="display:flex;flex:1;min-height:0;overflow:hidden">
+                      <div style="flex:1;min-width:0;overflow:auto;background:#e9edf0;padding:12px;display:flex;align-items:flex-start;justify-content:center"><canvas id="layoutPdfPreview" style="width:100%;height:auto;max-width:100%;background:white;box-shadow:0 2px 8px #999"></canvas></div>
+                      <div id="layoutPdfControls" style="width:340px;max-width:42vw;overflow:auto;padding:10px;border-left:1px solid #ddd;box-sizing:border-box"></div>
+                    </div>
+                    <div style="padding:10px 14px;border-top:1px solid #ddd;display:flex;justify-content:flex-end;gap:8px">
+                      <button id="layoutPdfCancel" style="background:#757575;padding:9px 16px;font-size:13px">キャンセル</button>
+                      <button id="layoutPdfGenerate" style="background:#6a1b9a;padding:9px 16px;font-size:13px">この設定でPDFを出力</button>
+                    </div>
+                  </div>`;
+                document.body.appendChild(overlay);
+                overlay.querySelector('#layoutPdfTitle').value = layoutName;
+                const controlsPanel = overlay.querySelector('#layoutPdfControls');
+                for (const key of Object.keys(boxes)) {
+                    const section = document.createElement('div');
+                    section.style.cssText = 'border:1px solid #ddd;border-radius:6px;padding:8px;margin-bottom:8px;background:#fafafa;font-size:12px';
+                    section.innerHTML = `<strong>${imageLabels[key]}</strong>
+                      <label style="display:block;margin-top:7px">倍率：<span id="${key}ScaleValue">100%</span><input id="${key}Scale" type="range" min="50" max="200" step="5" value="100" style="width:100%"></label>
+                      <label style="display:block;margin-top:5px">左右位置：<span id="${key}XValue">0%</span><input id="${key}X" type="range" min="-50" max="50" step="1" value="0" style="width:100%"></label>
+                      <label style="display:block;margin-top:5px">上下位置：<span id="${key}YValue">0%</span><input id="${key}Y" type="range" min="-50" max="50" step="1" value="0" style="width:100%"></label>
+                      <button type="button" id="${key}Reset" style="margin-top:5px">この画像をリセット</button>`;
+                    controlsPanel.appendChild(section);
+                }
+
+                const previewCanvas = overlay.querySelector('#layoutPdfPreview');
+                previewCanvas.width = 1260; previewCanvas.height = 891;
+                const pctx = previewCanvas.getContext('2d');
+                const drawImageInBox = (ctx, img, box, setting, factor) => {
+                    const x=box.x*factor, y=box.y*factor, w=box.w*factor, h=box.h*factor;
+                    ctx.save(); ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
+                    if(box.label==='2D CAD 平面レイアウト'){img=pdfShowItemNames?(pdfShowItemDims?images.cad:images.cadNamesNoDims):(pdfShowItemDims?images.cadNoNames:images.cadNoNamesNoDims);}
+                    const fit=Math.min(w/img.naturalWidth,h/img.naturalHeight);
+                    const drawW=img.naturalWidth*fit*(setting.scale/100), drawH=img.naturalHeight*fit*(setting.scale/100);
+                    const dx=x+(w-drawW)/2+(setting.x/100)*w;
+                    const dy=y+(h-drawH)/2+(setting.y/100)*h;
+                    ctx.drawImage(img,dx,dy,drawW,drawH); ctx.restore();
+                };
+                const drawPreview = () => {
+                    const f=3, ctx=pctx;
+                    pdfShowItemNames=overlay.querySelector('#layoutPdfShowNames').checked;
+                    pdfShowItemDims=overlay.querySelector('#layoutPdfShowDims').checked;
+                    ctx.fillStyle='#fff'; ctx.fillRect(0,0,previewCanvas.width,previewCanvas.height);
+                    ctx.fillStyle='#232d37'; ctx.textBaseline='middle';
+                    let title=overlay.querySelector('#layoutPdfTitle').value || 'ブース レイアウト確認シート';
+                    let previewTitleSize=42; ctx.font=`bold ${previewTitleSize}px sans-serif`;
+                    while(ctx.measureText(title).width>800 && previewTitleSize>15) { previewTitleSize--; ctx.font=`bold ${previewTitleSize}px sans-serif`; }
+                    ctx.fillText(title,30,27);
+                    ctx.fillStyle='#444'; ctx.font='20px sans-serif'; ctx.textAlign='right'; ctx.fillText(`作成日：${dateText}`,1230,47); ctx.textAlign='left';
+                    ctx.strokeStyle='#78828c';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(30,63);ctx.lineTo(1230,63);ctx.stroke();
+                    // frame/header text are canvas text (Japanese font is rasterized, avoiding jsPDF font corruption)
+                    ctx.fillStyle='#232d37';ctx.font='bold 25px sans-serif';ctx.fillText(boxes.cad.label,30,91);
+                    ctx.strokeStyle='#bec3c8';ctx.lineWidth=2;ctx.strokeRect(30,108,194*f,237*f);
+                    drawImageInBox(ctx,images.cad,boxes.cad,settings.cad,f);
+                    for(const key of ['front','side','top','overview']){
+                        const b=boxes[key]; const frame={x:b.x-2,y:b.y-11,w:b.w+4,h:b.h+13};
+                        ctx.fillStyle='#232d37';ctx.font='bold 25px sans-serif';ctx.fillText(b.label,frame.x*f,frame.y*f+15);
+                        ctx.strokeStyle='#bec3c8';ctx.strokeRect(frame.x*f,(frame.y+9)*f,frame.w*f,(frame.h-9)*f);
+                        drawImageInBox(ctx,images[key],b,settings[key],f);
+                    }
+                    ctx.fillStyle='#5a646e';ctx.font='18px sans-serif';ctx.fillText(`ブース寸法：幅 ${Number(cadW).toFixed(2)} m × 奥行 ${Number(cadD).toFixed(2)} m`,30,850);
+                    ctx.font='15px sans-serif';ctx.fillText('※ 本シートはレイアウト確認用です。正式な施工図としては使用しないでください。',642,850);
+                };
+                const syncSettings = () => {
+                    for(const key of Object.keys(boxes)){
+                        settings[key].scale=Number(overlay.querySelector(`#${key}Scale`).value);
+                        settings[key].x=Number(overlay.querySelector(`#${key}X`).value);
+                        settings[key].y=Number(overlay.querySelector(`#${key}Y`).value);
+                        overlay.querySelector(`#${key}ScaleValue`).textContent=`${settings[key].scale}%`;
+                        overlay.querySelector(`#${key}XValue`).textContent=`${settings[key].x}%`;
+                        overlay.querySelector(`#${key}YValue`).textContent=`${settings[key].y}%`;
+                    }
+                    drawPreview();
+                };
+                for(const key of Object.keys(boxes)){
+                    for(const suffix of ['Scale','X','Y']) overlay.querySelector(`#${key}${suffix}`).addEventListener('input',syncSettings);
+                    overlay.querySelector(`#${key}Reset`).addEventListener('click',()=>{
+                        overlay.querySelector(`#${key}Scale`).value=100;overlay.querySelector(`#${key}X`).value=0;overlay.querySelector(`#${key}Y`).value=0;syncSettings();
+                    });
+                }
+                overlay.querySelector('#layoutPdfTitle').addEventListener('input',drawPreview);
+                overlay.querySelector('#layoutPdfShowNames').addEventListener('change',drawPreview);
+                overlay.querySelector('#layoutPdfShowDims').addEventListener('change',drawPreview);
+                drawPreview();
+
+                const userChoice = await new Promise(resolve => {
+                    overlay.querySelector('#layoutPdfCancel').addEventListener('click',()=>resolve(null),{once:true});
+                    overlay.querySelector('#layoutPdfGenerate').addEventListener('click',()=>resolve({title:overlay.querySelector('#layoutPdfTitle').value.trim() || 'ブース レイアウト確認シート'}),{once:true});
+                });
+                overlay.remove();
+                if (!userChoice) return;
+
+                btn.textContent = 'PDFを作成中...';
+                const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3', compress: true });
+                // 日本語をPDFフォントに直接渡さず、ブラウザの日本語フォントで描画したCanvas画像として出力
+                const addTextImage = (text, x, y, w, h, fontSize, bold=false, align='left', color='#232d37') => {
+                    const scale=4, c=document.createElement('canvas');c.width=Math.max(10,Math.round(w*scale));c.height=Math.max(10,Math.round(h*scale));
+                    const cctx=c.getContext('2d');cctx.clearRect(0,0,c.width,c.height);cctx.fillStyle=color;cctx.textBaseline='middle';cctx.textAlign=align;
+                    cctx.font=`${bold?'bold ':''}${Math.round(fontSize*scale)}px sans-serif`;
+                    let shown=String(text);while(cctx.measureText(shown).width>c.width-4 && fontSize>5){fontSize-=0.5;cctx.font=`${bold?'bold ':''}${Math.round(fontSize*scale)}px sans-serif`;}
+                    cctx.fillText(shown,align==='right'?c.width-2:align==='center'?c.width/2:2,c.height/2);
+                    pdf.addImage(c.toDataURL('image/png'),'PNG',x,y,w,h,undefined,'FAST');
+                };
+                const makeAdjustedImage = (key) => {
+                    const b=boxes[key]; let img=images[key]; if(key==='cad'){img=pdfShowItemNames?(pdfShowItemDims?images.cad:images.cadNamesNoDims):(pdfShowItemDims?images.cadNoNames:images.cadNoNamesNoDims);} const st=settings[key], factor=5;
+                    const c=document.createElement('canvas');c.width=Math.round(b.w*factor);c.height=Math.round(b.h*factor);
+                    const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+                    ctx.save();ctx.beginPath();ctx.rect(0,0,c.width,c.height);ctx.clip();
+                    const fit=Math.min(c.width/img.naturalWidth,c.height/img.naturalHeight);
+                    const dw=img.naturalWidth*fit*(st.scale/100),dh=img.naturalHeight*fit*(st.scale/100);
+                    ctx.drawImage(img,(c.width-dw)/2+(st.x/100)*c.width,(c.height-dh)/2+(st.y/100)*c.height,dw,dh);ctx.restore();
+                    return c.toDataURL('image/png');
+                };
+                pdf.setFillColor(255,255,255);pdf.rect(0,0,pageW,pageH,'F');
+                addTextImage(userChoice.title,margin,5,270,18,18,true);
+                addTextImage(`作成日：${dateText}`,300,8,110,10,9,false,'right','#444444');
+                pdf.setDrawColor(120,130,140);pdf.setLineWidth(0.4);pdf.line(margin,21,pageW-margin,21);
+                pdf.setDrawColor(190,195,200);
+                // 画像枠を見出しの下に配置し、見出しと画像が接触・重複しないようにする
+                pdf.rect(10,36,194,237); pdf.rect(214,40,93,100); pdf.rect(314,40,93,100); pdf.rect(214,163,93,100); pdf.rect(314,163,93,100);
+                addTextImage(boxes.cad.label,10,26,194,10,12,true);
+                addTextImage('正面図',214,28,93,9,12,true);addTextImage('側面図',314,28,93,9,12,true);
+                addTextImage('上面図',214,151,93,9,12,true);addTextImage('俯瞰図',314,151,93,9,12,true);
+                for(const key of Object.keys(boxes)) { const b=boxes[key]; pdf.addImage(makeAdjustedImage(key),'PNG',b.x,b.y,b.w,b.h,undefined,'FAST'); }
+                addTextImage(`ブース寸法：幅 ${Number(cadW).toFixed(2)} m × 奥行 ${Number(cadD).toFixed(2)} m`,10,277,194,8,9,false);
+                addTextImage('※ 本シートはレイアウト確認用です。正式な施工図としては使用しないでください。',214,277,196,8,7,false,'left','#5a646e');
+                pdf.save(`booth_layout_check_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.pdf`);
+            } catch (err) {
+                console.error('PDF出力エラー:', err);
+                alert('PDFの作成に失敗しました。ブラウザを再読み込みして、もう一度お試しください。');
+            } finally {
+                const adjustOverlay=document.getElementById('layoutPdfAdjustOverlay');if(adjustOverlay)adjustOverlay.remove();
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        });
+
+        // 初期状態：既存のブースレイアウトは使用せず、空のCADから開始
+        cadW=9; cadD=3; cadFromScratch=true; cadObjects=[]; cadSelected=-1;
+        originalFrameCadIds=[]; originalFrameMeshes=[]; originalFrameMoved=false; originalPanelCadId=-1; originalPanelMoved=false;
+        document.getElementById('cadW').value='9.00';
+        document.getElementById('cadD').value='3.00';
+        [floor,backWall,leftWall,rightWall,topFrameFront,topFrameCenter,frontLeftFrame,frontRightFrame,backLeftFrame,backRightFrame,topFrameBack,topFrameLeft,topFrameRight,signBase,signBottomFrame,signLeftFrame,signRightFrame].forEach(x=>{if(x)x.visible=false;});
+        equipmentsGroup.visible=false; standGroup.visible=false; exhibitionPanelGroup.visible=false;
+        Object.values(posters).forEach(p=>p.mesh.visible=false);
+        spotLights.forEach(l=>l.visible=false);
+        document.getElementById('cad2dPanel').style.display='flex';
+        drawCad();
+
+        // アニメーション
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
